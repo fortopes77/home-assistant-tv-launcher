@@ -13,12 +13,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import androidx.activity.result.contract.ActivityResultContracts
 import com.fortopes.tvlauncher.data.AppRepository
 import com.fortopes.tvlauncher.data.ContinueItem
 import com.fortopes.tvlauncher.data.ContinueWatchingRepository
 import com.fortopes.tvlauncher.data.JellyfinClient
 import com.fortopes.tvlauncher.data.JellyfinStore
+import com.fortopes.tvlauncher.data.NowPlayingStore
 import com.fortopes.tvlauncher.data.WatchNextRepository
 import com.fortopes.tvlauncher.ui.JellyfinSetupScreen
 import com.fortopes.tvlauncher.data.InputRepository
@@ -43,13 +43,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var jellyfinStore: JellyfinStore
     private lateinit var jellyfin: JellyfinClient
     private lateinit var watchNext: WatchNextRepository
+    private lateinit var nowPlaying: NowPlayingStore
     private lateinit var continueRepo: ContinueWatchingRepository
 
-    private val askWatchNext = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        watchNextAllowed = granted
-        if (!granted) toast("Android said no. Allow it in Settings → Apps → TV Home → Permissions.")
-        reloadContinue()
-    }
     private val loadLock = Mutex()
 
     private var apps by mutableStateOf<List<TvApp>>(emptyList())
@@ -60,8 +56,7 @@ class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf(Screen.Home)
     private var continueItems by mutableStateOf<List<ContinueItem>>(emptyList())
     private var jellyfinStatus by mutableStateOf<String?>(null)
-    private var watchNextAllowed by mutableStateOf(false)
-    private var watchNextSummary by mutableStateOf<String?>(null)
+    private var nowPlayingAccess by mutableStateOf(false)
     private var overrideEnabled by mutableStateOf(true)
     private var serviceEnabled by mutableStateOf(false)
     private var serviceStartedAt by mutableStateOf(0L)
@@ -76,7 +71,8 @@ class MainActivity : ComponentActivity() {
         jellyfinStore = JellyfinStore(this)
         jellyfin = JellyfinClient(jellyfinStore)
         watchNext = WatchNextRepository(this)
-        continueRepo = ContinueWatchingRepository(this, jellyfin, watchNext, prefs)
+        nowPlaying = NowPlayingStore(this)
+        continueRepo = ContinueWatchingRepository(this, jellyfin, watchNext, nowPlaying, prefs)
 
         setContent {
             TvHomeTheme {
@@ -97,8 +93,7 @@ class MainActivity : ComponentActivity() {
                             serviceStartedAt = serviceStartedAt,
                             lastError = lastError,
                             jellyfinStatus = jellyfinStatus,
-                            watchNextAllowed = watchNextAllowed,
-                            watchNextSummary = watchNextSummary,
+                            nowPlayingAccess = nowPlayingAccess,
                             version = BuildConfigVersion.name(this),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
@@ -120,8 +115,14 @@ class MainActivity : ComponentActivity() {
                                 refreshStatus()
                                 reloadContinue()
                             },
-                            onAllowWatchNext = {
-                                if (watchNext.hasPermission) toast("Already allowed") else askWatchNext.launch(WatchNextRepository.PERMISSION)
+                            onAllowNowPlaying = {
+                                if (nowPlayingAccess) {
+                                    toast("Already on")
+                                } else {
+                                    // Most TVs don't have this settings page; then the README's ADB command is the way.
+                                    runCatching { startActivity(nowPlaying.accessSettingsIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                        .onFailure { toast("This TV has no page for it. Use the ADB command in the README.") }
+                                }
                             },
                         )
                     }
@@ -130,7 +131,7 @@ class MainActivity : ComponentActivity() {
                         BackHandler { }
                         HomeScreen(
                             continueItems = continueItems,
-                            continueNeedsSetup = jellyfinStatus == null || !watchNextAllowed,
+                            continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
                             apps = apps,
                             inputs = inputs,
                             loaded = loaded,
@@ -184,7 +185,7 @@ class MainActivity : ComponentActivity() {
     private fun refreshStatus() {
         serviceStartedAt = prefs.serviceStartedAt
         lastError = prefs.lastError
-        watchNextAllowed = watchNext.hasPermission
+        nowPlayingAccess = nowPlaying.hasAccess()
         jellyfinStatus = if (jellyfinStore.isSignedIn) {
             "Signed in to ${jellyfinStore.serverName ?: jellyfinStore.url} as ${jellyfinStore.userName ?: "you"}."
         } else {
@@ -196,7 +197,6 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { continueRepo.load() }
             continueItems = result.items
-            watchNextSummary = withContext(Dispatchers.IO) { runCatching { watchNext.summary() }.getOrNull() }
             if (result.jellyfinError != null && jellyfinStore.isSignedIn) {
                 jellyfinStatus = "${result.jellyfinError}. Press OK to sign in again."
             }

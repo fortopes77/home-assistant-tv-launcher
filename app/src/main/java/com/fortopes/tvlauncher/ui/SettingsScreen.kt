@@ -33,8 +33,7 @@ fun SettingsScreen(
     serviceStartedAt: Long,
     lastError: String?,
     jellyfinStatus: String?,
-    watchNextAllowed: Boolean,
-    watchNextSummary: String?,
+    nowPlayingAccess: Boolean,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -44,7 +43,7 @@ fun SettingsScreen(
     onClearError: () -> Unit,
     onSetUpJellyfin: () -> Unit,
     onSignOutJellyfin: () -> Unit,
-    onAllowWatchNext: () -> Unit,
+    onAllowNowPlaying: () -> Unit,
 ) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
@@ -149,17 +148,17 @@ fun SettingsScreen(
 
         ListItem(
             selected = false,
-            onClick = onAllowWatchNext,
+            onClick = onAllowNowPlaying,
             modifier = rowModifier,
             headlineContent = { Text("Disney+, Binge and other apps") },
             supportingContent = {
                 Text(
-                    if (watchNextAllowed) "Allowed. Shows what apps share in the TV's watch next list. An app that doesn't share won't show." +
-                        (watchNextSummary?.let { "\nRight now: $it." } ?: "")
-                    else "Press OK and allow TV Home to see the TV's watch next list, where apps like Disney+ put what you're watching.",
+                    if (nowPlayingAccess) "On. TV Home remembers the last show each app played, and OK opens that app."
+                    else "Off. TV Home needs notification access to see what's playing. Android blocks it for sideloaded " +
+                        "apps, so turn it on with the ADB command in the README.",
                 )
             },
-            trailingContent = { Text(if (watchNextAllowed) "On" else "Off", color = if (watchNextAllowed) TvColors.Cyan else TvColors.Muted) },
+            trailingContent = { Text(if (nowPlayingAccess) "On" else "Off", color = if (nowPlayingAccess) TvColors.Cyan else TvColors.Muted) },
         )
 
         Text("Other", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
