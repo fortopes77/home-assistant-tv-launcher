@@ -95,8 +95,14 @@ fun SettingsScreen(
                 headlineContent = { Text("Switch keeps turning itself off?") },
                 supportingContent = {
                     Text(
-                        "Android blocks accessibility for apps that didn't come from the Play Store. Press OK here, " +
-                            "scroll to the bottom and choose \"Allow restricted settings\", then turn the switch on again.",
+                        if (serviceStartedAt > 0) {
+                            "It started, then stopped. If there's an error below, tell Claude what it says. " +
+                                "Press OK here to open TV Home's app info."
+                        } else {
+                            "It has never started, so Android is blocking it. Android does this for apps that didn't " +
+                                "come from the Play Store. Press OK here, and if the page has \"Allow restricted " +
+                                "settings\" at the bottom, choose it. If not, see the README for the ADB command."
+                        },
                     )
                 },
             )
