@@ -34,6 +34,7 @@ fun SettingsScreen(
     lastError: String?,
     jellyfinStatus: String?,
     nowPlayingAccess: Boolean,
+    haStatus: String?,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -44,6 +45,8 @@ fun SettingsScreen(
     onSetUpJellyfin: () -> Unit,
     onSignOutJellyfin: () -> Unit,
     onAllowNowPlaying: () -> Unit,
+    onSetUpHa: () -> Unit,
+    onSignOutHa: () -> Unit,
 ) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
@@ -160,6 +163,26 @@ fun SettingsScreen(
             },
             trailingContent = { Text(if (nowPlayingAccess) "On" else "Off", color = if (nowPlayingAccess) TvColors.Cyan else TvColors.Muted) },
         )
+
+        Text("Home Assistant", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+
+        ListItem(
+            selected = false,
+            onClick = onSetUpHa,
+            modifier = rowModifier,
+            headlineContent = { Text("Home Assistant") },
+            supportingContent = {
+                Text(haStatus ?: "Not connected. Press OK and scan the QR code with your phone to connect.")
+            },
+        )
+        if (haStatus != null) {
+            ListItem(
+                selected = false,
+                onClick = onSignOutHa,
+                modifier = rowModifier,
+                headlineContent = { Text("Disconnect Home Assistant") },
+            )
+        }
 
         Text("Other", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
 

@@ -29,7 +29,21 @@ import com.fortopes.tvlauncher.home.HomeButtonService
 import com.fortopes.tvlauncher.ui.HomeScreen
 import com.fortopes.tvlauncher.ui.SettingsScreen
 import com.fortopes.tvlauncher.ui.TvHomeTheme
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import com.fortopes.tvlauncher.data.HaClient
+import com.fortopes.tvlauncher.data.HaEntity
+import com.fortopes.tvlauncher.data.HaStore
+import com.fortopes.tvlauncher.data.HomeRepository
+import com.fortopes.tvlauncher.data.HomeState
+import com.fortopes.tvlauncher.ui.CameraScreen
+import com.fortopes.tvlauncher.ui.DashboardScreen
+import com.fortopes.tvlauncher.ui.HaSetupScreen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -45,13 +59,17 @@ class MainActivity : ComponentActivity() {
     private lateinit var watchNext: WatchNextRepository
     private lateinit var nowPlaying: NowPlayingStore
     private lateinit var continueRepo: ContinueWatchingRepository
+    private lateinit var haStore: HaStore
+    private lateinit var ha: HaClient
+    private lateinit var homeRepo: HomeRepository
+    private var homePolling: Job? = null
 
     private val loadLock = Mutex()
 
     private var apps by mutableStateOf<List<TvApp>>(emptyList())
     private var inputs by mutableStateOf<List<TvInput>>(emptyList())
     private var loaded by mutableStateOf(false)
-    private enum class Screen { Home, Settings, JellyfinSetup }
+    private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, Camera, Dashboard }
 
     private var screen by mutableStateOf(Screen.Home)
     private var continueItems by mutableStateOf<List<ContinueItem>>(emptyList())
@@ -62,6 +80,11 @@ class MainActivity : ComponentActivity() {
     private var serviceStartedAt by mutableStateOf(0L)
     private var lastError by mutableStateOf<String?>(null)
     private var resetSignal by mutableIntStateOf(0)
+    private var home by mutableStateOf<HomeState?>(null)
+    private var haStatus by mutableStateOf<String?>(null)
+    private var cameraStart by mutableIntStateOf(0)
+    /** Where Back from Home Assistant setup goes: the screen it was opened from. */
+    private var haSetupReturn = Screen.Home
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,10 +96,28 @@ class MainActivity : ComponentActivity() {
         watchNext = WatchNextRepository(this)
         nowPlaying = NowPlayingStore(this)
         continueRepo = ContinueWatchingRepository(this, jellyfin, watchNext, nowPlaying, prefs)
+        haStore = HaStore(this)
+        ha = HaClient(haStore)
+        homeRepo = HomeRepository(haStore, ha)
 
         setContent {
             TvHomeTheme {
                 when (screen) {
+                    Screen.HaSetup -> {
+                        BackHandler { screen = haSetupReturn }
+                        HaSetupScreen(store = haStore, client = ha, onDone = {
+                            screen = haSetupReturn
+                            refreshStatus()
+                            reloadHome()
+                        })
+                    }
+                    Screen.Camera -> {
+                        BackHandler { screen = Screen.Home }
+                        CameraScreen(cameras = home?.cameras.orEmpty(), start = cameraStart, loadImage = ::loadCamera)
+                    }
+                    Screen.Dashboard -> {
+                        DashboardScreen(url = ha.dashboardUrl(), onClose = { screen = Screen.Home })
+                    }
                     Screen.JellyfinSetup -> {
                         BackHandler { screen = Screen.Settings }
                         JellyfinSetupScreen(client = jellyfin, onDone = {
@@ -94,6 +135,7 @@ class MainActivity : ComponentActivity() {
                             lastError = lastError,
                             jellyfinStatus = jellyfinStatus,
                             nowPlayingAccess = nowPlayingAccess,
+                            haStatus = haStatus,
                             version = BuildConfigVersion.name(this),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
@@ -115,6 +157,15 @@ class MainActivity : ComponentActivity() {
                                 refreshStatus()
                                 reloadContinue()
                             },
+                            onSetUpHa = {
+                                haSetupReturn = Screen.Settings
+                                screen = Screen.HaSetup
+                            },
+                            onSignOutHa = {
+                                haStore.signOut()
+                                home = null
+                                refreshStatus()
+                            },
                             onAllowNowPlaying = {
                                 if (nowPlayingAccess) {
                                     toast("Already on")
@@ -134,6 +185,8 @@ class MainActivity : ComponentActivity() {
                             continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
                             apps = apps,
                             inputs = inputs,
+                            home = home,
+                            loadCamera = ::loadCamera,
                             loaded = loaded,
                             resetSignal = resetSignal,
                             onOpenContinue = {
@@ -143,6 +196,16 @@ class MainActivity : ComponentActivity() {
                             onOpenInput = { if (!inputRepo.open(it)) toast("This TV didn't open ${it.label}") },
                             onOpenTvSettings = ::openTvSettings,
                             onOpenLauncherSettings = { screen = Screen.Settings },
+                            onHaRun = ::runHa,
+                            onOpenCamera = {
+                                cameraStart = it
+                                screen = Screen.Camera
+                            },
+                            onOpenDashboard = { screen = Screen.Dashboard },
+                            onSetUpHa = {
+                                haSetupReturn = Screen.Home
+                                screen = Screen.HaSetup
+                            },
                         )
                     }
                 }
@@ -158,6 +221,12 @@ class MainActivity : ComponentActivity() {
         refreshStatus()
         reload() // picks up apps installed or removed while we were away
         reloadContinue()
+        startHomePolling()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        homePolling?.cancel()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -186,11 +255,55 @@ class MainActivity : ComponentActivity() {
         serviceStartedAt = prefs.serviceStartedAt
         lastError = prefs.lastError
         nowPlayingAccess = nowPlaying.hasAccess()
+        haStatus = if (haStore.isSignedIn) {
+            "Connected to ${haStore.url}" + (haStore.room?.let { ". TV's room: $it." } ?: ".")
+        } else {
+            null
+        }
         jellyfinStatus = if (jellyfinStore.isSignedIn) {
             "Signed in to ${jellyfinStore.serverName ?: jellyfinStore.url} as ${jellyfinStore.userName ?: "you"}."
         } else {
             null
         }
+    }
+
+    /** Keeps the Home row fresh while TV Home is showing: lights, what's playing, the weather. */
+    private fun startHomePolling() {
+        homePolling?.cancel()
+        homePolling = lifecycleScope.launch {
+            while (isActive) {
+                reloadHomeNow()
+                delay(30_000)
+            }
+        }
+    }
+
+    private fun reloadHome() {
+        lifecycleScope.launch { reloadHomeNow() }
+    }
+
+    private suspend fun reloadHomeNow() {
+        home = withContext(Dispatchers.IO) { runCatching { homeRepo.load() }.getOrNull() }
+    }
+
+    private fun runHa(entity: HaEntity) {
+        lifecycleScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { homeRepo.run(entity) }.isSuccess }
+            if (!ok) {
+                toast("Home Assistant didn't answer")
+            } else if (entity.domain == "script" || entity.domain == "scene") {
+                toast("${entity.name}: done")
+            }
+            delay(600) // give Home Assistant a moment to update, then show the new state
+            reloadHomeNow()
+        }
+    }
+
+    private suspend fun loadCamera(entityId: String): ImageBitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            val bytes = ha.cameraImage(entityId)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }.getOrNull()
     }
 
     private fun reloadContinue() {

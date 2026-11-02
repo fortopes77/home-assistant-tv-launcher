@@ -50,4 +50,5 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.tv.material)
     implementation(libs.coil.compose)
+    implementation(libs.zxing.core)
 }

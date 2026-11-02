@@ -18,6 +18,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -104,12 +111,18 @@ fun GlyphCard(
     @DrawableRes icon: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    active: Boolean = false,
+    detail: String? = null,
 ) {
     BannerCard(onClick = onClick, modifier = modifier) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Brush.linearGradient(listOf(Color(0xFF262838), Color(0xFF15161D)))),
+                .background(
+                    // "On" things (a light, something playing) glow in the accent colours.
+                    if (active) Brush.linearGradient(listOf(TvColors.Purple, TvColors.Blue))
+                    else Brush.linearGradient(listOf(Color(0xFF262838), Color(0xFF15161D))),
+                ),
         )
         Column(
             modifier = Modifier.fillMaxSize().padding(8.dp),
@@ -127,7 +140,51 @@ fun GlyphCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            if (detail != null) {
+                Text(
+                    text = detail,
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
+    }
+}
+
+/** A camera's latest picture, refreshed every [refreshMs]. */
+@Composable
+fun CameraCard(
+    name: String,
+    loadImage: suspend () -> ImageBitmap?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    refreshMs: Long = 15_000,
+) {
+    var image by remember { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(name) {
+        while (true) {
+            loadImage()?.let { image = it }
+            delay(refreshMs)
+        }
+    }
+    BannerCard(onClick = onClick, modifier = modifier) {
+        image?.let { Image(bitmap = it, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))),
+        )
+        Text(
+            text = name,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+        )
     }
 }
 
