@@ -12,6 +12,15 @@ A home screen for Google TV, styled like Projectivy's app rows, that sits on top
 
 - **Home:** a row for Home Assistant. It has your front door camera (OK for full screen, left and right for the others), what's playing, the lights in the TV's room, your scenes and scripts (such as Movie mode and Good night), and **Full dashboard**, which opens the dashboard's TV screen (`?tv`) inside TV Home for cameras, calendar, solar and rooms. The weather sits next to the clock.
 
+## Recommended (Seerr)
+
+A **Recommended** row of trending and popular films and series from Seerr (Jellyseerr or Overseerr). OK opens a flyout with the overview and buttons:
+- **Watch trailer**: plays in YouTube.
+- **Play in Jellyfin**: when it's already in your library.
+- **Request**: asks Seerr to add it.
+
+To connect, press OK on **Set up Seerr** and fill in the boxes on the TV. You need Seerr's address, such as `cunn-ha.local:5055`, and its API key, from Seerr → Settings → General. The Google Home app's keyboard can paste the key. Requests made with the API key count as Seerr's admin user.
+
 ## Connect Home Assistant
 
 Press OK on **Connect** in the Home row (or in the gear's Home Assistant section), and fill in the boxes on the TV. The Google Home app's TV remote keyboard can type or paste into them from your phone, which is easiest for the long token. Or scan the QR code and fill them in on your phone's browser (the phone has to be on the same network as the TV). You need:

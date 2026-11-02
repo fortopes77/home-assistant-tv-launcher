@@ -70,6 +70,7 @@ import com.fortopes.tvlauncher.R
 import com.fortopes.tvlauncher.data.ContinueItem
 import com.fortopes.tvlauncher.data.HaEntity
 import com.fortopes.tvlauncher.data.HomeState
+import com.fortopes.tvlauncher.data.SeerrItem
 import com.fortopes.tvlauncher.data.TvApp
 import com.fortopes.tvlauncher.data.TvInput
 import kotlinx.coroutines.delay
@@ -95,6 +96,12 @@ private sealed interface HomeRow {
         override val title = "Apps"
     }
 
+    /** Seerr's trending and popular films and series. */
+    data class Recommended(val items: List<SeerrItem>, val showSetup: Boolean) : HomeRow {
+        override val key = "recommended"
+        override val title = "Recommended"
+    }
+
     /** Home Assistant: a camera, what's playing, the TV room's lights and blinds, scenes and scripts, the rest of the house's lights and blinds, the full dashboard. */
     data class Home(val state: HomeState?) : HomeRow {
         override val key = "home"
@@ -113,6 +120,9 @@ fun HomeScreen(
     continueItems: List<ContinueItem>,
     continueNeedsSetup: Boolean,
     apps: List<TvApp>,
+    recommended: List<SeerrItem>,
+    seerrNeedsSetup: Boolean,
+    canPlayJellyfin: Boolean,
     inputs: List<TvInput>,
     home: HomeState?,
     loadCamera: suspend (String) -> ImageBitmap?,
@@ -131,13 +141,18 @@ fun HomeScreen(
     onOpenCamera: (Int) -> Unit,
     onOpenDashboard: () -> Unit,
     onSetUpHa: () -> Unit,
+    onSetUpSeerr: () -> Unit,
+    onSeerrTrailer: (SeerrItem) -> Unit,
+    onSeerrPlay: (SeerrItem) -> Unit,
+    onSeerrRequest: (SeerrItem) -> Unit,
 ) {
-    val rows = remember(continueItems, continueNeedsSetup, apps, inputs, home) {
+    val rows = remember(continueItems, continueNeedsSetup, apps, recommended, seerrNeedsSetup, inputs, home) {
         buildList {
             if (continueItems.isNotEmpty() || continueNeedsSetup) {
                 add(HomeRow.ContinueWatching(continueItems, showSetup = continueItems.isEmpty()))
             }
             if (apps.isNotEmpty()) add(HomeRow.Apps(apps))
+            if (recommended.isNotEmpty() || seerrNeedsSetup) add(HomeRow.Recommended(recommended, showSetup = seerrNeedsSetup))
             add(HomeRow.Home(home))
             if (inputs.isNotEmpty()) add(HomeRow.Inputs(inputs))
         }
@@ -166,6 +181,11 @@ fun HomeScreen(
         }
     }
     BackHandler(enabled = menuApp != null) { menuApp = null }
+
+    // OK on a Recommended card: its details in a flyout. Kept by key so it updates after a request.
+    var seerrKey by remember { mutableStateOf<String?>(null) }
+    val seerrFocus = remember { HashMap<String, FocusRequester>() }
+    BackHandler(enabled = seerrKey != null) { seerrKey = null }
 
     val columnState = rememberLazyListState()
     val rowStates = remember { HashMap<String, LazyListState>() }
@@ -336,6 +356,37 @@ fun HomeScreen(
                                             },
                                     )
                                 }
+                                is HomeRow.Recommended -> {
+                                    itemsIndexed(row.items, key = { _, item -> item.key }) { i, item ->
+                                        RecommendedCard(
+                                            item = item,
+                                            onClick = { seerrKey = item.key },
+                                            modifier = Modifier
+                                                .firstIf(isFirstRow && i == 0, firstCard)
+                                                .focusRequester(seerrFocus.getOrPut(item.key) { FocusRequester() })
+                                                .onFocusChanged {
+                                                    if (it.isFocused) {
+                                                        val sub = listOfNotNull(item.kind, item.year.ifBlank { null }, item.source, item.statusLabel.ifBlank { null })
+                                                        spotlight = Spotlight(item.title, sub.joinToString(" · ") + " · OK for trailer and more", TvColors.Blue)
+                                                    }
+                                                },
+                                        )
+                                    }
+                                    if (row.showSetup) {
+                                        item(key = "seerr-setup") {
+                                            GlyphCard(
+                                                label = "Set up Seerr",
+                                                icon = R.drawable.ic_movie,
+                                                onClick = onSetUpSeerr,
+                                                modifier = Modifier
+                                                    .firstIf(isFirstRow, firstCard)
+                                                    .onFocusChanged {
+                                                        if (it.isFocused) spotlight = Spotlight("Recommended", "Connect Seerr for trending films and series, trailers and requests", TvColors.Blue)
+                                                    },
+                                            )
+                                        }
+                                    }
+                                }
                                 is HomeRow.Home -> {
                                     val state = row.state
                                     fun Modifier.spot(title: String, sub: String, i: Int) = this
@@ -439,6 +490,22 @@ fun HomeScreen(
             }
         }
 
+        seerrKey?.let { key ->
+            val item = recommended.firstOrNull { it.key == key }
+            if (item != null) {
+                SeerrPanel(
+                    item = item,
+                    canPlay = canPlayJellyfin && item.jellyfinId != null,
+                    onTrailer = { onSeerrTrailer(item) },
+                    onPlay = {
+                        seerrKey = null
+                        onSeerrPlay(item)
+                    },
+                    onRequest = { onSeerrRequest(item) },
+                )
+            }
+        }
+
         menuApp?.let { app ->
             AppMenu(
                 app = app,
@@ -458,6 +525,20 @@ fun HomeScreen(
                 },
             )
         }
+    }
+
+    // Closing the details puts focus back on the card.
+    var lastSeerrKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(seerrKey) {
+        val open = seerrKey
+        if (open != null) {
+            lastSeerrKey = open
+            return@LaunchedEffect
+        }
+        val back = lastSeerrKey ?: return@LaunchedEffect
+        lastSeerrKey = null
+        delay(50)
+        runCatching { seerrFocus[back]?.requestFocus() }
     }
 
     // When the menu closes (Back, Move, or Hide), focus goes back to the app, or the first card if it's hidden.

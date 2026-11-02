@@ -35,6 +35,9 @@ fun SettingsScreen(
     jellyfinStatus: String?,
     nowPlayingAccess: Boolean,
     haStatus: String?,
+    seerrStatus: String?,
+    onSetUpSeerr: () -> Unit,
+    onSignOutSeerr: () -> Unit,
     lightMode: Boolean,
     hiddenApps: List<Pair<String, String>>,
     onToggleLightMode: (Boolean) -> Unit,
@@ -170,6 +173,17 @@ fun SettingsScreen(
             },
             trailingContent = { Text(if (nowPlayingAccess) "On" else "Off", color = if (nowPlayingAccess) TvColors.Cyan else TvColors.Muted) },
         )
+
+        ListItem(
+            selected = false,
+            onClick = onSetUpSeerr,
+            modifier = rowModifier,
+            headlineContent = { Text("Seerr") },
+            supportingContent = { Text(seerrStatus ?: "Not connected. Press OK to connect, for the Recommended row with trailers and requests.") },
+        )
+        if (seerrStatus != null) {
+            ListItem(selected = false, onClick = onSignOutSeerr, modifier = rowModifier, headlineContent = { Text("Disconnect Seerr") })
+        }
 
         Text("Home Assistant", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
 

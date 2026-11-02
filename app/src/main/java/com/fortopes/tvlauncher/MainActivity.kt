@@ -27,6 +27,10 @@ import com.fortopes.tvlauncher.ui.JellyfinSetupScreen
 import com.fortopes.tvlauncher.data.InputRepository
 import com.fortopes.tvlauncher.data.LauncherPrefs
 import com.fortopes.tvlauncher.data.TvApp
+import com.fortopes.tvlauncher.data.SeerrClient
+import com.fortopes.tvlauncher.data.SeerrItem
+import com.fortopes.tvlauncher.data.SeerrStore
+import com.fortopes.tvlauncher.ui.SeerrSetupScreen
 import com.fortopes.tvlauncher.data.TvInput
 import com.fortopes.tvlauncher.home.HomeButtonService
 import com.fortopes.tvlauncher.ui.HomeScreen
@@ -65,6 +69,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var haStore: HaStore
     private lateinit var ha: HaClient
     private lateinit var homeRepo: HomeRepository
+    private lateinit var seerrStore: SeerrStore
+    private lateinit var seerr: SeerrClient
+    private var recommended by mutableStateOf<List<SeerrItem>>(emptyList())
+    private var seerrStatus by mutableStateOf<String?>(null)
+    private var recommendedAt = 0L
     private var homePolling: Job? = null
 
     private val loadLock = Mutex()
@@ -76,7 +85,7 @@ class MainActivity : ComponentActivity() {
     private var allApps: List<TvApp> = emptyList()
     private var hiddenApps by mutableStateOf<List<Pair<String, String>>>(emptyList())
     private var lightMode by mutableStateOf(false)
-    private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, Camera, Dashboard }
+    private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, SeerrSetup, Camera, Dashboard }
 
     private var screen by mutableStateOf(Screen.Home)
     private var continueItems by mutableStateOf<List<ContinueItem>>(emptyList())
@@ -107,6 +116,8 @@ class MainActivity : ComponentActivity() {
         haStore = HaStore(this)
         ha = HaClient(haStore)
         homeRepo = HomeRepository(haStore, ha)
+        seerrStore = SeerrStore(this)
+        seerr = SeerrClient(seerrStore)
 
         setContent {
             TvHomeTheme {
@@ -117,6 +128,14 @@ class MainActivity : ComponentActivity() {
                             screen = haSetupReturn
                             refreshStatus()
                             reloadHome()
+                        })
+                    }
+                    Screen.SeerrSetup -> {
+                        BackHandler { screen = Screen.Settings }
+                        SeerrSetupScreen(store = seerrStore, client = seerr, onDone = {
+                            screen = Screen.Home
+                            refreshStatus()
+                            reloadRecommended(force = true)
                         })
                     }
                     Screen.Camera -> {
@@ -143,6 +162,9 @@ class MainActivity : ComponentActivity() {
                             continueItems = continueItems,
                             continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
                             apps = apps,
+                            recommended = recommended,
+                            seerrNeedsSetup = seerrStatus == null,
+                            canPlayJellyfin = jellyfinStore.isSignedIn,
                             inputs = inputs,
                             home = home,
                             loadCamera = ::loadCamera,
@@ -181,6 +203,18 @@ class MainActivity : ComponentActivity() {
                                 haSetupReturn = Screen.Home
                                 screen = Screen.HaSetup
                             },
+                            onSetUpSeerr = { screen = Screen.SeerrSetup },
+                            onSeerrTrailer = ::playTrailer,
+                            onSeerrPlay = { item ->
+                                val id = item.jellyfinId.orEmpty()
+                                val play = ContinueItem(
+                                    key = item.key, title = item.title, subtitle = "", imageUrl = null, progress = null,
+                                    sourceLabel = "Jellyfin", sourcePackage = JellyfinClient.JELLYFIN_PACKAGE, lastWatched = 0L,
+                                    action = ContinueItem.Action.Jellyfin(id, 0L),
+                                )
+                                if (id.isEmpty() || !continueRepo.open(play, (application as TvHomeApp).scope)) toast("Couldn't open Jellyfin")
+                            },
+                            onSeerrRequest = ::requestSeerr,
                         )
                             if (screen == Screen.Settings) {
                                 SettingsScreen(
@@ -191,6 +225,13 @@ class MainActivity : ComponentActivity() {
                             jellyfinStatus = jellyfinStatus,
                             nowPlayingAccess = nowPlayingAccess,
                             haStatus = haStatus,
+                            seerrStatus = seerrStatus,
+                            onSetUpSeerr = { screen = Screen.SeerrSetup },
+                            onSignOutSeerr = {
+                                seerrStore.signOut()
+                                recommended = emptyList()
+                                refreshStatus()
+                            },
                             lightMode = lightMode,
                             hiddenApps = hiddenApps,
                             onToggleLightMode = {
@@ -201,7 +242,7 @@ class MainActivity : ComponentActivity() {
                                 appRepo.unhide(it)
                                 applyArrangement()
                             },
-                            version = BuildConfigVersion.name(this),
+                            version = BuildConfigVersion.name(this@MainActivity),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
                                 overrideEnabled = it
@@ -258,6 +299,7 @@ class MainActivity : ComponentActivity() {
         refreshStatus()
         reload() // picks up apps installed or removed while we were away
         reloadContinue()
+        reloadRecommended()
         startHomePolling()
     }
 
@@ -316,6 +358,48 @@ class MainActivity : ComponentActivity() {
         appRepo.saveOrder(list)
     }
 
+    /** Seerr's picks change slowly, so ask at most every half hour unless [force]d. */
+    private fun reloadRecommended(force: Boolean = false) {
+        if (!seerrStore.isSignedIn) return
+        if (!force && System.currentTimeMillis() - recommendedAt < 30 * 60_000L && recommended.isNotEmpty()) return
+        lifecycleScope.launch {
+            val items = withContext(Dispatchers.IO) { runCatching { seerr.recommended() }.getOrNull() }
+            if (!items.isNullOrEmpty()) {
+                recommended = items
+                recommendedAt = System.currentTimeMillis()
+            }
+        }
+    }
+
+    /** Opens the trailer in the YouTube app (or anything that plays YouTube links). */
+    private fun playTrailer(item: SeerrItem) {
+        lifecycleScope.launch {
+            val key = withContext(Dispatchers.IO) { runCatching { seerr.trailerKey(item) }.getOrNull() }
+            if (key == null) {
+                toast("No trailer for ${item.title}")
+                return@launch
+            }
+            val link = Uri.parse("https://www.youtube.com/watch?v=$key")
+            val youtube = Intent(Intent.ACTION_VIEW, link).setPackage("com.google.android.youtube.tv").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val ok = runCatching { startActivity(youtube) }.isSuccess ||
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, link).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+            if (!ok) toast("Couldn't open YouTube")
+        }
+    }
+
+    private fun requestSeerr(item: SeerrItem) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { seerr.request(item) } }
+            if (result.isSuccess) {
+                toast("Requested ${item.title}")
+                // Show it as requested straight away; the next reload brings Seerr's own status.
+                recommended = recommended.map { if (it.key == item.key) it.copy(status = 2) else it }
+            } else {
+                toast("Seerr didn't take the request")
+            }
+        }
+    }
+
     private fun refreshStatus() {
         serviceStartedAt = prefs.serviceStartedAt
         lastError = prefs.lastError
@@ -325,6 +409,7 @@ class MainActivity : ComponentActivity() {
         } else {
             null
         }
+        seerrStatus = if (seerrStore.isSignedIn) "Connected to ${seerrStore.url}." else null
         jellyfinStatus = if (jellyfinStore.isSignedIn) {
             "Signed in to ${jellyfinStore.serverName ?: jellyfinStore.url} as ${jellyfinStore.userName ?: "you"}."
         } else {
