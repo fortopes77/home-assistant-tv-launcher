@@ -78,7 +78,7 @@ private sealed interface HomeRow {
         override val title = "Apps"
     }
 
-    /** Home Assistant: a camera, scenes and scripts, the TV room's lights, what's playing, the full dashboard. */
+    /** Home Assistant: a camera, what's playing, the TV room's lights and blinds, scenes and scripts, the rest of the house's lights and blinds, the full dashboard. */
     data class Home(val state: HomeState?) : HomeRow {
         override val key = "home"
         override val title = "Home"
@@ -302,29 +302,26 @@ fun HomeScreen(
                                                 )
                                             }
                                         }
-                                        state.lights.forEach { light ->
+                                        state.roomControls.forEach { c ->
                                             val i = n++
-                                            item(key = light.id) {
-                                                GlyphCard(
-                                                    label = light.name,
-                                                    icon = R.drawable.ic_bulb,
-                                                    onClick = { onHaRun(light) },
-                                                    active = light.isOn,
-                                                    detail = if (light.isOn) "On" else "Off",
-                                                    modifier = Modifier.spot(light.name, "Light · OK to turn ${if (light.isOn) "off" else "on"}", i),
-                                                )
-                                            }
+                                            item(key = c.id) { ControlCard(c, onClick = { onHaRun(c) }, modifier = Modifier.spot(c.name, controlHint(c), i)) }
                                         }
                                         state.actions.forEach { a ->
                                             val i = n++
                                             item(key = a.id) {
+                                                val look = actionStyle(a)
                                                 GlyphCard(
                                                     label = a.name,
-                                                    icon = R.drawable.ic_play,
+                                                    icon = look.icon,
+                                                    colors = look.colors,
                                                     onClick = { onHaRun(a) },
                                                     modifier = Modifier.spot(a.name, if (a.domain == "scene") "Scene · OK to set it" else "Script · OK to run it", i),
                                                 )
                                             }
+                                        }
+                                        state.otherControls.forEach { c ->
+                                            val i = n++
+                                            item(key = c.id) { ControlCard(c, onClick = { onHaRun(c) }, modifier = Modifier.spot(c.name, controlHint(c), i)) }
                                         }
                                         val i = n
                                         item(key = "dashboard") {
@@ -414,5 +411,37 @@ private fun Clock() {
         color = TvColors.Text,
         fontSize = 22.sp,
         fontWeight = FontWeight.Medium,
+    )
+}
+
+/** "Open", "Closed" or "Open 40%" for a blind; "On" or "Off" for a light. */
+private fun controlState(c: HaEntity): String {
+    if (c.domain != "cover") return if (c.isOn) "On" else "Off"
+    val pos = c.attributes.optInt("current_position", -1)
+    return when {
+        c.state == "opening" -> "Opening"
+        c.state == "closing" -> "Closing"
+        pos in 1..99 -> "Open $pos%"
+        c.state == "open" -> "Open"
+        else -> "Closed"
+    }
+}
+
+private fun controlHint(c: HaEntity): String =
+    if (c.domain == "cover") "Blind · ${controlState(c)} · OK to ${if (c.isOn) "close" else "open"}"
+    else "Light · OK to turn ${if (c.isOn) "off" else "on"}"
+
+/** A light or blind in the Home row. */
+@Composable
+private fun ControlCard(c: HaEntity, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val look = controlStyle(c)
+    GlyphCard(
+        label = c.name,
+        icon = look.icon,
+        colors = look.colors,
+        onClick = onClick,
+        active = c.isOn,
+        detail = controlState(c),
+        modifier = modifier,
     )
 }

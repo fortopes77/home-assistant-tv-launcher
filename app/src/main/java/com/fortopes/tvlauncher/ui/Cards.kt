@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -113,15 +114,20 @@ fun GlyphCard(
     modifier: Modifier = Modifier,
     active: Boolean = false,
     detail: String? = null,
+    colors: List<Color>? = null,
 ) {
     BannerCard(onClick = onClick, modifier = modifier) {
         Box(
             Modifier
                 .fillMaxSize()
                 .background(
-                    // "On" things (a light, something playing) glow in the accent colours.
-                    if (active) Brush.linearGradient(listOf(TvColors.Purple, TvColors.Blue))
-                    else Brush.linearGradient(listOf(Color(0xFF262838), Color(0xFF15161D))),
+                    when {
+                        // Its own colours (a scene's sunrise, a light that's on), bottom left to top right.
+                        colors != null -> Brush.linearGradient(colors, start = Offset(0f, Float.POSITIVE_INFINITY), end = Offset(Float.POSITIVE_INFINITY, 0f))
+                        // "On" things (something playing) glow in the accent colours.
+                        active -> Brush.linearGradient(listOf(TvColors.Purple, TvColors.Blue))
+                        else -> Brush.linearGradient(listOf(Color(0xFF262838), Color(0xFF15161D)))
+                    },
                 ),
         )
         Column(
