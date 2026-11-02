@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
     private var home by mutableStateOf<HomeState?>(null)
     private var haStatus by mutableStateOf<String?>(null)
     private var cameraStart by mutableIntStateOf(0)
+    private var dashboardUrl = ""
     /** Where Back from Home Assistant setup goes: the screen it was opened from. */
     private var haSetupReturn = Screen.Home
 
@@ -116,7 +117,7 @@ class MainActivity : ComponentActivity() {
                         CameraScreen(cameras = home?.cameras.orEmpty(), start = cameraStart, loadImage = ::loadCamera)
                     }
                     Screen.Dashboard -> {
-                        DashboardScreen(url = ha.dashboardUrl(), onClose = { screen = Screen.Home })
+                        DashboardScreen(url = dashboardUrl, onClose = { screen = Screen.Home })
                     }
                     Screen.JellyfinSetup -> {
                         BackHandler { screen = Screen.Settings }
@@ -201,7 +202,13 @@ class MainActivity : ComponentActivity() {
                                 cameraStart = it
                                 screen = Screen.Camera
                             },
-                            onOpenDashboard = { screen = Screen.Dashboard },
+                            onOpenDashboard = {
+                                // Looking up a .local address can touch the network, so not on the main thread.
+                                lifecycleScope.launch {
+                                    dashboardUrl = withContext(Dispatchers.IO) { ha.dashboardUrl() }
+                                    screen = Screen.Dashboard
+                                }
+                            },
                             onSetUpHa = {
                                 haSetupReturn = Screen.Home
                                 screen = Screen.HaSetup
