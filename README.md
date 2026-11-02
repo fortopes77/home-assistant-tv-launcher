@@ -42,7 +42,15 @@ Newer Google TV versions can block the accessibility switch for apps that didn't
    - **USB debugging / Network debugging** (older ones): turn it on, then run `adb connect <tv-ip>:5555` and accept the prompt on the TV.
 
    `adb devices` should now list the TV. You can also install from here with `adb install -r tv-home.apk`.
-3. **Turn on the service.** First see what's already on:
+3. **Lift the block, then use the switch on the TV.** This is the simplest fix, and it leaves other apps' accessibility services (such as Projectivy's) alone:
+
+   ```sh
+   adb shell appops set com.fortopes.tvlauncher ACCESS_RESTRICTED_SETTINGS allow
+   ```
+
+   Then turn on Settings → System → Accessibility → **TV Home: Home button** on the TV.
+
+   Or turn the service on straight from ADB. First see what's already on:
 
    ```sh
    adb shell settings get secure enabled_accessibility_services
