@@ -49,6 +49,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.Text
 import com.fortopes.tvlauncher.R
+import com.fortopes.tvlauncher.data.ContinueItem
 import com.fortopes.tvlauncher.data.TvApp
 import com.fortopes.tvlauncher.data.TvInput
 import kotlinx.coroutines.delay
@@ -58,13 +59,17 @@ import java.util.Date
 private data class Spotlight(val title: String, val subtitle: String, val color: Color)
 
 /**
- * The rows on the home screen, top to bottom. Later steps slot in here:
- * step 2 adds a "Continue watching" row above Apps (Jellyfin, Disney+, Binge), and
- * step 3 adds the Home Assistant panel based on the dashboard's `tv` view.
+ * The rows on the home screen, top to bottom. Step 3 adds the Home Assistant panel based on the
+ * dashboard's `tv` view.
  */
 private sealed interface HomeRow {
     val key: String
     val title: String
+
+    data class ContinueWatching(val items: List<ContinueItem>, val showSetup: Boolean) : HomeRow {
+        override val key = "continue"
+        override val title = "Continue watching"
+    }
 
     data class Apps(val apps: List<TvApp>) : HomeRow {
         override val key = "apps"
@@ -80,18 +85,23 @@ private sealed interface HomeRow {
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(
+    continueItems: List<ContinueItem>,
+    continueNeedsSetup: Boolean,
     apps: List<TvApp>,
     inputs: List<TvInput>,
     loaded: Boolean,
     resetSignal: Int,
+    onOpenContinue: (ContinueItem) -> Unit,
     onOpenApp: (TvApp) -> Unit,
     onOpenInput: (TvInput) -> Unit,
     onOpenTvSettings: () -> Unit,
     onOpenLauncherSettings: () -> Unit,
 ) {
-    val rows = remember(apps, inputs) {
+    val rows = remember(continueItems, continueNeedsSetup, apps, inputs) {
         buildList {
-            // Step 2: add HomeRow.ContinueWatching here.
+            if (continueItems.isNotEmpty() || continueNeedsSetup) {
+                add(HomeRow.ContinueWatching(continueItems, showSetup = continueItems.isEmpty()))
+            }
             if (apps.isNotEmpty()) add(HomeRow.Apps(apps))
             add(HomeRow.Inputs(inputs)) // always shown: it holds the TV settings card
             // Step 3: add the Home Assistant panel here.
@@ -181,6 +191,42 @@ fun HomeScreen(
                             modifier = Modifier.focusRestorer(),
                         ) {
                             when (row) {
+                                is HomeRow.ContinueWatching -> {
+                                    itemsIndexed(row.items, key = { _, item -> item.key }) { i, item ->
+                                        ContinueCard(
+                                            item = item,
+                                            onClick = { onOpenContinue(item) },
+                                            modifier = Modifier
+                                                .firstIf(isFirstRow && i == 0, firstCard)
+                                                .onFocusChanged {
+                                                    if (it.isFocused) {
+                                                        val sub = listOf(item.subtitle, item.sourceLabel).filter { s -> s.isNotBlank() }
+                                                        spotlight = Spotlight(item.title, sub.joinToString(" · "), TvColors.Purple)
+                                                    }
+                                                },
+                                        )
+                                    }
+                                    if (row.showSetup) {
+                                        item(key = "continue-setup") {
+                                            GlyphCard(
+                                                label = "Set up",
+                                                icon = R.drawable.ic_settings,
+                                                onClick = onOpenLauncherSettings,
+                                                modifier = Modifier
+                                                    .firstIf(isFirstRow, firstCard)
+                                                    .onFocusChanged {
+                                                        if (it.isFocused) {
+                                                            spotlight = Spotlight(
+                                                                "Continue watching",
+                                                                "Sign in to Jellyfin and let TV Home see what other apps are playing",
+                                                                TvColors.Purple,
+                                                            )
+                                                        }
+                                                    },
+                                            )
+                                        }
+                                    }
+                                }
                                 is HomeRow.Apps -> itemsIndexed(row.apps, key = { _, app -> app.key }) { i, app ->
                                     AppCard(
                                         app = app,

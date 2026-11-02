@@ -1,6 +1,8 @@
 package com.fortopes.tvlauncher.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +32,8 @@ fun SettingsScreen(
     serviceEnabled: Boolean,
     serviceStartedAt: Long,
     lastError: String?,
+    jellyfinStatus: String?,
+    watchNextAllowed: Boolean,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -37,6 +41,9 @@ fun SettingsScreen(
     onOpenTvSettings: () -> Unit,
     onOpenAppInfo: () -> Unit,
     onClearError: () -> Unit,
+    onSetUpJellyfin: () -> Unit,
+    onSignOutJellyfin: () -> Unit,
+    onAllowWatchNext: () -> Unit,
 ) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
@@ -45,6 +52,7 @@ fun SettingsScreen(
         Modifier
             .fillMaxSize()
             .background(TvColors.Background)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 96.dp, vertical = 40.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -117,6 +125,42 @@ fun SettingsScreen(
                 supportingContent = { Text(lastError.lines().take(6).joinToString("\n"), fontSize = 11.sp) },
             )
         }
+
+        Text("Continue watching", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+
+        ListItem(
+            selected = false,
+            onClick = onSetUpJellyfin,
+            modifier = rowModifier,
+            headlineContent = { Text("Jellyfin") },
+            supportingContent = {
+                Text(jellyfinStatus ?: "Not signed in. Press OK to sign in with a code from the Jellyfin app on your phone.")
+            },
+        )
+        if (jellyfinStatus != null) {
+            ListItem(
+                selected = false,
+                onClick = onSignOutJellyfin,
+                modifier = rowModifier,
+                headlineContent = { Text("Sign out of Jellyfin") },
+            )
+        }
+
+        ListItem(
+            selected = false,
+            onClick = onAllowWatchNext,
+            modifier = rowModifier,
+            headlineContent = { Text("Disney+, Binge and other apps") },
+            supportingContent = {
+                Text(
+                    if (watchNextAllowed) "Allowed. Shows what apps share in the TV's watch next list. An app that doesn't share won't show."
+                    else "Press OK and allow TV Home to see the TV's watch next list, where apps like Disney+ put what you're watching.",
+                )
+            },
+            trailingContent = { Text(if (watchNextAllowed) "On" else "Off", color = if (watchNextAllowed) TvColors.Cyan else TvColors.Muted) },
+        )
+
+        Text("Other", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
 
         ListItem(
             selected = false,

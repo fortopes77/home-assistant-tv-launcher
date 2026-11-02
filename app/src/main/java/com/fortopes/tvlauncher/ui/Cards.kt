@@ -6,9 +6,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +34,8 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import com.fortopes.tvlauncher.data.ContinueItem
 import com.fortopes.tvlauncher.data.TvApp
 
 /** Width of the 16:9 cards in every row: about five and a half fit across a TV. */
@@ -45,7 +51,7 @@ fun BannerCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     container: Color = TvColors.Card,
-    content: @Composable () -> Unit,
+    content: @Composable BoxScope.() -> Unit,
 ) {
     Card(
         onClick = onClick,
@@ -121,6 +127,63 @@ fun GlyphCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 6.dp),
             )
+        }
+    }
+}
+
+/** A Continue watching card: the show's picture, a progress bar along the bottom, and the app it's in. */
+@Composable
+fun ContinueCard(item: ContinueItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    BannerCard(onClick = onClick, modifier = modifier) {
+        if (item.imageUrl != null) {
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        // Shade the bottom so the title reads over any picture.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))),
+        )
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+        ) {
+            Text(
+                text = item.title,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = item.sourceLabel,
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 10.sp,
+                maxLines = 1,
+            )
+        }
+        item.progress?.let { p ->
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(Color.White.copy(alpha = 0.25f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(p.coerceIn(0.02f, 1f))
+                        .fillMaxHeight()
+                        .background(TvColors.Purple),
+                )
+            }
         }
     }
 }

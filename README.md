@@ -6,7 +6,16 @@ A home screen for Google TV, styled like Projectivy's app rows, that sits on top
 - **Inputs & settings:** the TV's HDMI inputs (only on a TV; a Chromecast or streaming box has none) and a TV settings card.
 - **Home button:** like Projectivy, an accessibility service opens TV Home when you press Home, or when you press Back out of an app and would land on the Google TV home. Turn it off in TV Home's settings (the gear, top right) and Home goes back to the stock Google TV screen. Nothing is replaced, so uninstalling TV Home leaves the TV exactly as it was.
 
-Still to come: a Continue watching row (Jellyfin, Disney+, Binge) and a Home Assistant panel based on the dashboard's `tv` view.
+- **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. Disney+, Binge and other apps come from the TV's own "watch next" list, and OK takes you back into the app at that show.
+
+Still to come: a Home Assistant panel based on the dashboard's `tv` view.
+
+## Set up Continue watching
+
+Open TV Home's settings (the gear, top right). Nothing needs typing:
+
+- **Jellyfin:** press OK on Jellyfin. TV Home finds your server on the network and shows a code. On your phone, open the Jellyfin app → Settings → **Quick Connect** and enter it. (If the TV says Quick Connect is off, turn it on in Jellyfin's Dashboard → General.) If the server isn't found, type its address in the box, like `192.168.1.20`.
+- **Disney+, Binge and other apps:** press OK and allow TV Home to see the watch next list. Each app decides whether it shares what you're watching there, so an app that doesn't share won't show up. Jellyfin's own entries in that list are skipped, since they come from the server instead.
 
 ## Get the APK
 
@@ -33,7 +42,15 @@ Newer Google TV versions can block the accessibility switch for apps that didn't
    - **USB debugging / Network debugging** (older ones): turn it on, then run `adb connect <tv-ip>:5555` and accept the prompt on the TV.
 
    `adb devices` should now list the TV. You can also install from here with `adb install -r tv-home.apk`.
-3. **Turn on the service.** First see what's already on:
+3. **Lift the block, then use the switch on the TV.** This is the simplest fix, and it leaves other apps' accessibility services (such as Projectivy's) alone:
+
+   ```sh
+   adb shell appops set com.fortopes.tvlauncher ACCESS_RESTRICTED_SETTINGS allow
+   ```
+
+   Then turn on Settings → System → Accessibility → **TV Home: Home button** on the TV.
+
+   Or turn the service on straight from ADB. First see what's already on:
 
    ```sh
    adb shell settings get secure enabled_accessibility_services
@@ -70,6 +87,10 @@ To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstal
 | `.../home/HomeButtonService.kt` | The accessibility service that catches Home and the stock home appearing |
 | `.../data/AppRepository.kt` | Lists Google TV apps with their banners and colours, and opens them |
 | `.../data/InputRepository.kt` | Lists HDMI inputs and switches to them |
+| `.../data/JellyfinClient.kt` | Finds the Jellyfin server, Quick Connect sign-in, the resume list, and starting playback on the TV |
+| `.../data/WatchNextRepository.kt` | Reads the TV's watch next list (Disney+, Binge, ...) |
+| `.../data/ContinueWatchingRepository.kt` | Merges the two into one row and opens items |
+| `.../ui/JellyfinSetupScreen.kt` | The no-typing Jellyfin sign-in |
 | `.../data/LauncherPrefs.kt` | The on/off toggle and the "open Google TV home once" flag |
 | `.../ui/HomeScreen.kt` | The rows, spotlight title, clock and background; later rows slot in here |
 | `.../ui/Cards.kt` | The Projectivy-style banner cards |
