@@ -1,0 +1,128 @@
+package com.fortopes.tvlauncher.ui
+
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Text
+import com.fortopes.tvlauncher.data.TvApp
+
+/** Width of the 16:9 cards in every row: about five and a half fit across a TV. */
+val CardWidth = 156.dp
+private val CardShape = RoundedCornerShape(10.dp)
+
+/**
+ * The Projectivy-style card: a wide banner with rounded corners that grows a little and gets a white
+ * ring when the remote is on it.
+ */
+@Composable
+fun BannerCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    container: Color = TvColors.Card,
+    content: @Composable () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.width(CardWidth).aspectRatio(16f / 9f),
+        shape = CardDefaults.shape(shape = CardShape),
+        colors = CardDefaults.colors(containerColor = container, focusedContainerColor = container),
+        scale = CardDefaults.scale(focusedScale = 1.1f),
+        border = CardDefaults.border(
+            focusedBorder = Border(border = BorderStroke(3.dp, Color.White), shape = CardShape),
+        ),
+    ) {
+        Box(Modifier.fillMaxSize()) { content() }
+    }
+}
+
+@Composable
+fun AppCard(app: TvApp, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    BannerCard(onClick = onClick, modifier = modifier, container = if (app.banner == null) app.color.darken() else TvColors.Card) {
+        when {
+            app.banner != null -> Image(
+                bitmap = app.banner,
+                contentDescription = app.label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            // No TV banner (a phone app): its icon and name on its own colour, like Projectivy does.
+            else -> Column(
+                modifier = Modifier.fillMaxSize().padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                app.icon?.let { Image(bitmap = it, contentDescription = null, modifier = Modifier.size(40.dp)) }
+                Text(
+                    text = app.label,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+/** A card with a symbol and a name, for HDMI inputs and shortcuts. */
+@Composable
+fun GlyphCard(
+    label: String,
+    @DrawableRes icon: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BannerCard(onClick = onClick, modifier = modifier) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(listOf(Color(0xFF262838), Color(0xFF15161D)))),
+        )
+        Column(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(painter = painterResource(icon), contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+private fun Color.darken(): Color = Color(red * 0.55f, green * 0.55f, blue * 0.55f, 1f)
