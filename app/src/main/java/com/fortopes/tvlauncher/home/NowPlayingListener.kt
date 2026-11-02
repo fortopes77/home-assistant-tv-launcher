@@ -103,7 +103,7 @@ class NowPlayingListener : NotificationListenerService() {
     }
 
     // An error here must never crash TV Home.
-    private inline fun safely(block: () -> Unit) {
+    private fun safely(block: () -> Unit) {
         try {
             block()
         } catch (e: Exception) {
