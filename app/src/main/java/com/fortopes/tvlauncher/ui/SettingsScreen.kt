@@ -35,6 +35,13 @@ fun SettingsScreen(
     jellyfinStatus: String?,
     nowPlayingAccess: Boolean,
     haStatus: String?,
+    seerrStatus: String?,
+    onSetUpSeerr: () -> Unit,
+    onSignOutSeerr: () -> Unit,
+    lightMode: Boolean,
+    hiddenApps: List<Pair<String, String>>,
+    onToggleLightMode: (Boolean) -> Unit,
+    onUnhideApp: (String) -> Unit,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -51,28 +58,31 @@ fun SettingsScreen(
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(TvColors.Background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 96.dp, vertical = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text("TV Home settings", color = TvColors.Text, fontSize = 30.sp, fontWeight = FontWeight.SemiBold)
+    SidePanel {
+        Text("Settings", color = TvColors.Text, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
         Text(
-            "Back returns to the home screen.",
+            "Back closes this.",
             color = TvColors.Muted,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 16.dp),
+            fontSize = 13.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
         )
 
-        val rowModifier = Modifier.widthIn(max = 720.dp)
+        val rowModifier = Modifier
+
+        ListItem(
+            selected = false,
+            onClick = onOpenTvSettings,
+            modifier = rowModifier.focusRequester(first),
+            headlineContent = { Text("TV settings") },
+            supportingContent = { Text("Google TV's own settings: network, picture, sound, apps") },
+        )
+
+        Text("Home button", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
 
         ListItem(
             selected = false,
             onClick = { onToggleOverride(!overrideEnabled) },
-            modifier = rowModifier.focusRequester(first),
+            modifier = rowModifier,
             headlineContent = { Text("Open TV Home with the Home button") },
             supportingContent = {
                 Text(
@@ -164,6 +174,17 @@ fun SettingsScreen(
             trailingContent = { Text(if (nowPlayingAccess) "On" else "Off", color = if (nowPlayingAccess) TvColors.Cyan else TvColors.Muted) },
         )
 
+        ListItem(
+            selected = false,
+            onClick = onSetUpSeerr,
+            modifier = rowModifier,
+            headlineContent = { Text("Seerr") },
+            supportingContent = { Text(seerrStatus ?: "Not connected. Press OK to connect, for the Recommended row with trailers and requests.") },
+        )
+        if (seerrStatus != null) {
+            ListItem(selected = false, onClick = onSignOutSeerr, modifier = rowModifier, headlineContent = { Text("Disconnect Seerr") })
+        }
+
         Text("Home Assistant", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
 
         ListItem(
@@ -172,7 +193,7 @@ fun SettingsScreen(
             modifier = rowModifier,
             headlineContent = { Text("Home Assistant") },
             supportingContent = {
-                Text(haStatus ?: "Not connected. Press OK and scan the QR code with your phone to connect.")
+                Text(haStatus ?: "Not connected. Press OK to connect, typing on the TV with the Google Home app's keyboard or on your phone with the QR code.")
             },
         )
         if (haStatus != null) {
@@ -184,6 +205,38 @@ fun SettingsScreen(
             )
         }
 
+        Text("Look", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+
+        ListItem(
+            selected = false,
+            onClick = { onToggleLightMode(!lightMode) },
+            modifier = rowModifier,
+            headlineContent = { Text("Light mode for slow TVs") },
+            supportingContent = {
+                Text(
+                    if (lightMode) "On: no colour glow or fades, so moving around stays quick."
+                    else "Off: the background takes on the colour of what you're on.",
+                )
+            },
+            trailingContent = { Switch(checked = lightMode, onCheckedChange = null) },
+        )
+
+        Text(
+            "To move or hide an app, hold OK on it in the Apps row.",
+            color = TvColors.Muted,
+            fontSize = 13.sp,
+            modifier = rowModifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+        )
+        hiddenApps.forEach { (key, label) ->
+            ListItem(
+                selected = false,
+                onClick = { onUnhideApp(key) },
+                modifier = rowModifier,
+                headlineContent = { Text(label) },
+                supportingContent = { Text("Hidden from TV Home. Press OK to show it again.") },
+            )
+        }
+
         Text("Other", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
 
         ListItem(
@@ -192,13 +245,6 @@ fun SettingsScreen(
             modifier = rowModifier,
             headlineContent = { Text("Open the Google TV home") },
             supportingContent = { Text("Once, without turning the toggle off. The next time you leave an app you come back here.") },
-        )
-
-        ListItem(
-            selected = false,
-            onClick = onOpenTvSettings,
-            modifier = rowModifier,
-            headlineContent = { Text("TV settings") },
         )
 
         Text("Version $version", color = TvColors.Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 16.dp))

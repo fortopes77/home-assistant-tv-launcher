@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,10 +60,12 @@ fun BannerCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     container: Color = TvColors.Card,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Card(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.width(CardWidth).aspectRatio(16f / 9f),
         shape = CardDefaults.shape(shape = CardShape),
         colors = CardDefaults.colors(containerColor = container, focusedContainerColor = container),
@@ -76,8 +79,28 @@ fun BannerCard(
 }
 
 @Composable
-fun AppCard(app: TvApp, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    BannerCard(onClick = onClick, modifier = modifier, container = if (app.banner == null) app.color.darken() else TvColors.Card) {
+fun AppCard(
+    app: TvApp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    moving: Boolean = false,
+) {
+    BannerCard(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier,
+        container = if (app.banner == null) app.color.darken() else TvColors.Card,
+    ) {
+        if (moving) {
+            // Arrows over the card while it's being moved.
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).zIndex(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("◀   ▶", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         when {
             app.banner != null -> Image(
                 bitmap = app.banner,
@@ -252,3 +275,45 @@ fun ContinueCard(item: ContinueItem, onClick: () -> Unit, modifier: Modifier = M
 }
 
 private fun Color.darken(): Color = Color(red * 0.55f, green * 0.55f, blue * 0.55f, 1f)
+
+/** A film or show from Seerr: its backdrop, title, and a tick when it's already in your library. */
+@Composable
+fun RecommendedCard(item: com.fortopes.tvlauncher.data.SeerrItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    BannerCard(onClick = onClick, modifier = modifier) {
+        (item.backdropUrl ?: item.posterUrl)?.let {
+            AsyncImage(model = it, contentDescription = item.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))),
+        )
+        Text(
+            text = item.title,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+        )
+        val badge = when {
+            item.available -> "In library"
+            item.requested -> "Requested"
+            else -> null
+        }
+        if (badge != null) {
+            Text(
+                text = badge,
+                color = Color.White,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .background(if (item.available) Color(0xCC16A34A) else Color(0xCC7C3AED), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+        }
+    }
+}

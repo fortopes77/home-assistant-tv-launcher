@@ -23,6 +23,11 @@ class LauncherPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_BYPASS, false)
         set(value) = prefs.edit().putBoolean(KEY_BYPASS, value).apply()
 
+    /** Light mode for slow TVs: no colour glow behind the rows and no fades, so moving around stays quick. */
+    var lightMode: Boolean
+        get() = prefs.getBoolean(KEY_LIGHT_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_LIGHT_MODE, value).apply()
+
     /** When the Home button service last started, or 0 if it never has. */
     var serviceStartedAt: Long
         get() = prefs.getLong(KEY_SERVICE_STARTED, 0L)
@@ -55,5 +60,6 @@ class LauncherPrefs(context: Context) {
         private const val KEY_SERVICE_STARTED = "service_started_at"
         private const val KEY_LAST_ERROR = "last_error"
         private const val KEY_BYPASS = "bypass_stock_home"
+        private const val KEY_LIGHT_MODE = "light_mode"
     }
 }

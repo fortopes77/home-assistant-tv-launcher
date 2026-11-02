@@ -8,6 +8,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +27,10 @@ import com.fortopes.tvlauncher.ui.JellyfinSetupScreen
 import com.fortopes.tvlauncher.data.InputRepository
 import com.fortopes.tvlauncher.data.LauncherPrefs
 import com.fortopes.tvlauncher.data.TvApp
+import com.fortopes.tvlauncher.data.SeerrClient
+import com.fortopes.tvlauncher.data.SeerrItem
+import com.fortopes.tvlauncher.data.SeerrStore
+import com.fortopes.tvlauncher.ui.SeerrSetupScreen
 import com.fortopes.tvlauncher.data.TvInput
 import com.fortopes.tvlauncher.home.HomeButtonService
 import com.fortopes.tvlauncher.ui.HomeScreen
@@ -62,6 +69,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var haStore: HaStore
     private lateinit var ha: HaClient
     private lateinit var homeRepo: HomeRepository
+    private lateinit var seerrStore: SeerrStore
+    private lateinit var seerr: SeerrClient
+    private var recommended by mutableStateOf<List<SeerrItem>>(emptyList())
+    private var seerrStatus by mutableStateOf<String?>(null)
+    private var recommendedAt = 0L
     private var homePolling: Job? = null
 
     private val loadLock = Mutex()
@@ -69,7 +81,11 @@ class MainActivity : ComponentActivity() {
     private var apps by mutableStateOf<List<TvApp>>(emptyList())
     private var inputs by mutableStateOf<List<TvInput>>(emptyList())
     private var loaded by mutableStateOf(false)
-    private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, Camera, Dashboard }
+    /** Every app, before your order and hidden apps are applied; [apps] is what the row shows. */
+    private var allApps: List<TvApp> = emptyList()
+    private var hiddenApps by mutableStateOf<List<Pair<String, String>>>(emptyList())
+    private var lightMode by mutableStateOf(false)
+    private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, SeerrSetup, Camera, Dashboard }
 
     private var screen by mutableStateOf(Screen.Home)
     private var continueItems by mutableStateOf<List<ContinueItem>>(emptyList())
@@ -100,6 +116,8 @@ class MainActivity : ComponentActivity() {
         haStore = HaStore(this)
         ha = HaClient(haStore)
         homeRepo = HomeRepository(haStore, ha)
+        seerrStore = SeerrStore(this)
+        seerr = SeerrClient(seerrStore)
 
         setContent {
             TvHomeTheme {
@@ -110,6 +128,14 @@ class MainActivity : ComponentActivity() {
                             screen = haSetupReturn
                             refreshStatus()
                             reloadHome()
+                        })
+                    }
+                    Screen.SeerrSetup -> {
+                        BackHandler { screen = Screen.Settings }
+                        SeerrSetupScreen(store = seerrStore, client = seerr, onDone = {
+                            screen = Screen.Home
+                            refreshStatus()
+                            reloadRecommended(force = true)
                         })
                     }
                     Screen.Camera -> {
@@ -127,9 +153,71 @@ class MainActivity : ComponentActivity() {
                             reloadContinue()
                         })
                     }
-                    Screen.Settings -> {
-                        BackHandler { screen = Screen.Home }
-                        SettingsScreen(
+                    // Settings is a flyout over the home screen, so the rows stay where you left them.
+                    Screen.Home, Screen.Settings -> {
+                        // On the home screen Back has nowhere to go; with settings open it closes them.
+                        BackHandler { if (screen == Screen.Settings) screen = Screen.Home }
+                        Box(Modifier.fillMaxSize()) {
+                            HomeScreen(
+                            continueItems = continueItems,
+                            continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
+                            apps = apps,
+                            recommended = recommended,
+                            seerrNeedsSetup = seerrStatus == null,
+                            canPlayJellyfin = jellyfinStore.isSignedIn,
+                            inputs = inputs,
+                            home = home,
+                            loadCamera = ::loadCamera,
+                            loaded = loaded,
+                            lightMode = lightMode,
+                            settingsOpen = screen == Screen.Settings,
+                            resetSignal = resetSignal,
+                            onMoveApp = ::moveApp,
+                            onHideApp = {
+                                appRepo.hide(it)
+                                applyArrangement()
+                                toast("${it.label} hidden. Show it again from the gear.")
+                            },
+                            onAppInfo = {
+                                open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", it.component.packageName, null)))
+                            },
+                            onOpenContinue = {
+                                if (!continueRepo.open(it, (application as TvHomeApp).scope)) toast("Couldn't open ${it.sourceLabel}")
+                            },
+                            onOpenApp = { if (!appRepo.launch(it)) toast("Couldn't open ${it.label}") },
+                            onOpenInput = { if (!inputRepo.open(it)) toast("This TV didn't open ${it.label}") },
+                            onOpenLauncherSettings = { screen = Screen.Settings },
+                            onHaRun = ::runHa,
+                            onOpenCamera = {
+                                cameraStart = it
+                                screen = Screen.Camera
+                            },
+                            onOpenDashboard = {
+                                // Looking up a .local address can touch the network, so not on the main thread.
+                                lifecycleScope.launch {
+                                    dashboardUrl = withContext(Dispatchers.IO) { ha.dashboardUrl() }
+                                    screen = Screen.Dashboard
+                                }
+                            },
+                            onSetUpHa = {
+                                haSetupReturn = Screen.Home
+                                screen = Screen.HaSetup
+                            },
+                            onSetUpSeerr = { screen = Screen.SeerrSetup },
+                            onSeerrTrailer = ::playTrailer,
+                            onSeerrPlay = { item ->
+                                val id = item.jellyfinId.orEmpty()
+                                val play = ContinueItem(
+                                    key = item.key, title = item.title, subtitle = "", imageUrl = null, progress = null,
+                                    sourceLabel = "Jellyfin", sourcePackage = JellyfinClient.JELLYFIN_PACKAGE, lastWatched = 0L,
+                                    action = ContinueItem.Action.Jellyfin(id, 0L),
+                                )
+                                if (id.isEmpty() || !continueRepo.open(play, (application as TvHomeApp).scope)) toast("Couldn't open Jellyfin")
+                            },
+                            onSeerrRequest = ::requestSeerr,
+                        )
+                            if (screen == Screen.Settings) {
+                                SettingsScreen(
                             overrideEnabled = overrideEnabled,
                             serviceEnabled = serviceEnabled,
                             serviceStartedAt = serviceStartedAt,
@@ -137,7 +225,24 @@ class MainActivity : ComponentActivity() {
                             jellyfinStatus = jellyfinStatus,
                             nowPlayingAccess = nowPlayingAccess,
                             haStatus = haStatus,
-                            version = BuildConfigVersion.name(this),
+                            seerrStatus = seerrStatus,
+                            onSetUpSeerr = { screen = Screen.SeerrSetup },
+                            onSignOutSeerr = {
+                                seerrStore.signOut()
+                                recommended = emptyList()
+                                refreshStatus()
+                            },
+                            lightMode = lightMode,
+                            hiddenApps = hiddenApps,
+                            onToggleLightMode = {
+                                prefs.lightMode = it
+                                lightMode = it
+                            },
+                            onUnhideApp = {
+                                appRepo.unhide(it)
+                                applyArrangement()
+                            },
+                            version = BuildConfigVersion.name(this@MainActivity),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
                                 overrideEnabled = it
@@ -177,43 +282,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                         )
-                    }
-                    Screen.Home -> {
-                        // This is the home screen, so Back has nowhere to go.
-                        BackHandler { }
-                        HomeScreen(
-                            continueItems = continueItems,
-                            continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
-                            apps = apps,
-                            inputs = inputs,
-                            home = home,
-                            loadCamera = ::loadCamera,
-                            loaded = loaded,
-                            resetSignal = resetSignal,
-                            onOpenContinue = {
-                                if (!continueRepo.open(it, (application as TvHomeApp).scope)) toast("Couldn't open ${it.sourceLabel}")
-                            },
-                            onOpenApp = { if (!appRepo.launch(it)) toast("Couldn't open ${it.label}") },
-                            onOpenInput = { if (!inputRepo.open(it)) toast("This TV didn't open ${it.label}") },
-                            onOpenTvSettings = ::openTvSettings,
-                            onOpenLauncherSettings = { screen = Screen.Settings },
-                            onHaRun = ::runHa,
-                            onOpenCamera = {
-                                cameraStart = it
-                                screen = Screen.Camera
-                            },
-                            onOpenDashboard = {
-                                // Looking up a .local address can touch the network, so not on the main thread.
-                                lifecycleScope.launch {
-                                    dashboardUrl = withContext(Dispatchers.IO) { ha.dashboardUrl() }
-                                    screen = Screen.Dashboard
-                                }
-                            },
-                            onSetUpHa = {
-                                haSetupReturn = Screen.Home
-                                screen = Screen.HaSetup
-                            },
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -224,10 +294,12 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         prefs.bypassStockHome = false
         overrideEnabled = prefs.overrideEnabled
+        lightMode = prefs.lightMode
         serviceEnabled = prefs.isServiceEnabled()
         refreshStatus()
         reload() // picks up apps installed or removed while we were away
         reloadContinue()
+        reloadRecommended()
         startHomePolling()
     }
 
@@ -248,12 +320,82 @@ class MainActivity : ComponentActivity() {
     private fun reload() {
         lifecycleScope.launch {
             loadLock.withLock {
+                // A fresh start: show the apps from last time at once, then check what's installed now.
+                if (allApps.isEmpty()) {
+                    val cached = withContext(Dispatchers.IO) { appRepo.loadCached() }
+                    if (cached.isNotEmpty()) {
+                        allApps = cached
+                        applyArrangement()
+                        loaded = true
+                    }
+                }
                 val (newApps, newInputs) = withContext(Dispatchers.IO) {
                     appRepo.loadApps() to inputRepo.loadInputs()
                 }
-                apps = newApps
+                allApps = newApps
+                applyArrangement()
                 inputs = newInputs
                 loaded = true
+            }
+        }
+    }
+
+    /** Applies your order and hidden apps to [allApps]. */
+    private fun applyArrangement() {
+        apps = appRepo.arrange(allApps)
+        val hide = appRepo.hidden
+        hiddenApps = allApps.filter { it.key in hide }.map { it.key to it.label }
+    }
+
+    /** Moves an app one place left (-1) or right (+1) in the row, and remembers the order. */
+    private fun moveApp(app: TvApp, by: Int) {
+        val list = apps.toMutableList()
+        val i = list.indexOfFirst { it.key == app.key }
+        val j = i + by
+        if (i < 0 || j !in list.indices) return
+        list.add(j, list.removeAt(i))
+        apps = list
+        appRepo.saveOrder(list)
+    }
+
+    /** Seerr's picks change slowly, so ask at most every half hour unless [force]d. */
+    private fun reloadRecommended(force: Boolean = false) {
+        if (!seerrStore.isSignedIn) return
+        if (!force && System.currentTimeMillis() - recommendedAt < 30 * 60_000L && recommended.isNotEmpty()) return
+        lifecycleScope.launch {
+            val items = withContext(Dispatchers.IO) { runCatching { seerr.recommended() }.getOrNull() }
+            if (!items.isNullOrEmpty()) {
+                recommended = items
+                recommendedAt = System.currentTimeMillis()
+            }
+        }
+    }
+
+    /** Opens the trailer in the YouTube app (or anything that plays YouTube links). */
+    private fun playTrailer(item: SeerrItem) {
+        lifecycleScope.launch {
+            val key = withContext(Dispatchers.IO) { runCatching { seerr.trailerKey(item) }.getOrNull() }
+            if (key == null) {
+                toast("No trailer for ${item.title}")
+                return@launch
+            }
+            val link = Uri.parse("https://www.youtube.com/watch?v=$key")
+            val youtube = Intent(Intent.ACTION_VIEW, link).setPackage("com.google.android.youtube.tv").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val ok = runCatching { startActivity(youtube) }.isSuccess ||
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, link).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+            if (!ok) toast("Couldn't open YouTube")
+        }
+    }
+
+    private fun requestSeerr(item: SeerrItem) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching { seerr.request(item) } }
+            if (result.isSuccess) {
+                toast("Requested ${item.title}")
+                // Show it as requested straight away; the next reload brings Seerr's own status.
+                recommended = recommended.map { if (it.key == item.key) it.copy(status = 2) else it }
+            } else {
+                toast("Seerr didn't take the request")
             }
         }
     }
@@ -267,6 +409,7 @@ class MainActivity : ComponentActivity() {
         } else {
             null
         }
+        seerrStatus = if (seerrStore.isSignedIn) "Connected to ${seerrStore.url}." else null
         jellyfinStatus = if (jellyfinStore.isSignedIn) {
             "Signed in to ${jellyfinStore.serverName ?: jellyfinStore.url} as ${jellyfinStore.userName ?: "you"}."
         } else {
