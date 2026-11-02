@@ -18,16 +18,25 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.Switch
 import androidx.tv.material3.Text
+import java.text.DateFormat
+import java.util.Date
+
+private fun formatTime(millis: Long): String =
+    if (millis <= 0) "never" else DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(millis))
 
 @Composable
 fun SettingsScreen(
     overrideEnabled: Boolean,
     serviceEnabled: Boolean,
+    serviceStartedAt: Long,
+    lastError: String?,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenStockHome: () -> Unit,
     onOpenTvSettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
+    onClearError: () -> Unit,
 ) {
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
@@ -70,12 +79,38 @@ fun SettingsScreen(
             headlineContent = { Text("Home button service") },
             supportingContent = {
                 Text(
-                    if (serviceEnabled) "Turned on. The toggle above works."
-                    else "Turned off. Open Accessibility and turn on \"TV Home: Home button\", or use the ADB command in the README.",
+                    if (serviceEnabled) "Turned on. The toggle above works. Last started ${formatTime(serviceStartedAt)}."
+                    else "Turned off. Open Accessibility and turn on \"TV Home: Home button\"." +
+                        if (serviceStartedAt > 0) " It last ran ${formatTime(serviceStartedAt)}." else "",
                 )
             },
             trailingContent = { Text(if (serviceEnabled) "On" else "Off", color = if (serviceEnabled) TvColors.Cyan else TvColors.Muted) },
         )
+
+        if (!serviceEnabled) {
+            ListItem(
+                selected = false,
+                onClick = onOpenAppInfo,
+                modifier = rowModifier,
+                headlineContent = { Text("Switch keeps turning itself off?") },
+                supportingContent = {
+                    Text(
+                        "Android blocks accessibility for apps that didn't come from the Play Store. Press OK here, " +
+                            "scroll to the bottom and choose \"Allow restricted settings\", then turn the switch on again.",
+                    )
+                },
+            )
+        }
+
+        if (lastError != null) {
+            ListItem(
+                selected = false,
+                onClick = onClearError,
+                modifier = rowModifier,
+                headlineContent = { Text("Last error (press OK to clear)") },
+                supportingContent = { Text(lastError.lines().take(6).joinToString("\n"), fontSize = 11.sp) },
+            )
+        }
 
         ListItem(
             selected = false,
