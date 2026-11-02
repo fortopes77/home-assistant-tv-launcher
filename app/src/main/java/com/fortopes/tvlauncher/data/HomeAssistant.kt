@@ -16,7 +16,7 @@ class HaStore(context: Context) {
         get() = prefs.getString("token", null)
         set(value) = prefs.edit().putString("token", value).apply()
 
-    /** The room the TV is in (a Home Assistant area name), for the room's lights. */
+    /** The room the TV is in (a Home Assistant area name). Its lights and blinds show first. */
     var room: String?
         get() = prefs.getString("room", null)
         set(value) = prefs.edit().putString("room", value).apply()
@@ -34,7 +34,11 @@ data class HaEntity(
     val attributes: JSONObject,
 ) {
     val domain: String get() = id.substringBefore('.')
-    val isOn: Boolean get() = state == "on" || state == "playing" || state == "open"
+    val isOn: Boolean get() = state == "on" || state == "playing" || state == "open" || state == "opening"
+
+    /** A blind, curtain or shade, which the Home row offers next to lights. Garage doors and gates are left out. */
+    val isBlind: Boolean get() = domain == "cover" &&
+        attributes.optString("device_class", "") in setOf("", "blind", "curtain", "shade", "shutter", "window", "awning")
     val unavailable: Boolean get() = state == "unavailable" || state == "unknown"
 }
 
@@ -122,7 +126,10 @@ data class HomeState(
     val weather: String?,
     val cameras: List<HaEntity>,
     val actions: List<HaEntity>,
-    val lights: List<HaEntity>,
+    /** Lights and blinds in the TV's room, shown first. */
+    val roomControls: List<HaEntity>,
+    /** The rest of the house's lights and blinds, after the scenes. */
+    val otherControls: List<HaEntity>,
     val nowPlaying: HaEntity?,
     val error: String? = null,
 )
@@ -137,7 +144,7 @@ class HomeRepository(private val store: HaStore, private val client: HaClient) {
             client.states()
         } catch (e: Exception) {
             val msg = if (e is HttpException && e.code == 401) "Home Assistant token stopped working" else "Couldn't reach Home Assistant"
-            return HomeState(null, emptyList(), emptyList(), emptyList(), null, msg)
+            return HomeState(null, emptyList(), emptyList(), emptyList(), emptyList(), null, msg)
         }
         val room = store.room
         val inRoom: Set<String> = when {
@@ -155,21 +162,26 @@ class HomeRepository(private val store: HaStore, private val client: HaClient) {
         // The doorbell or front door first, since that's the one you'd check from the couch.
         val cameras = states.filter { it.domain == "camera" && !it.unavailable }
             .sortedByDescending { c -> listOf("doorbell", "front door", "front").indexOfFirst { c.name.contains(it, true) }.let { if (it < 0) -1 else 10 - it } }
+        // Scenes first, then scripts.
         val actions = states.filter { (it.domain == "script" || it.domain == "scene") && !it.unavailable }
-            .sortedBy { it.name.lowercase() }
-            .take(12)
-        val lights = states.filter { it.domain == "light" && it.id in inRoom }.sortedBy { it.name.lowercase() }
+            .sortedWith(compareBy<HaEntity> { if (it.domain == "scene") 0 else 1 }.thenBy { it.name.lowercase() })
+            .take(16)
+        // Lights, then blinds, by name.
+        val controls = states.filter { (it.domain == "light" || it.isBlind) && !it.unavailable }
+            .sortedWith(compareBy<HaEntity> { if (it.domain == "light") 0 else 1 }.thenBy { it.name.lowercase() })
+        val (roomControls, otherControls) = controls.partition { it.id in inRoom }
         val players = states.filter { it.domain == "media_player" && (it.state == "playing" || it.state == "paused") }
         val nowPlaying = players.firstOrNull { it.id in inRoom && it.state == "playing" }
             ?: players.firstOrNull { it.state == "playing" }
             ?: players.firstOrNull()
-        return HomeState(weather, cameras, actions, lights, nowPlaying)
+        return HomeState(weather, cameras, actions, roomControls, otherControls, nowPlaying)
     }
 
     fun run(entity: HaEntity) = when (entity.domain) {
         "script" -> client.call("script", "turn_on", JSONObject().put("entity_id", entity.id))
         "scene" -> client.call("scene", "turn_on", JSONObject().put("entity_id", entity.id))
         "light" -> client.call("light", "toggle", JSONObject().put("entity_id", entity.id))
+        "cover" -> client.call("cover", "toggle", JSONObject().put("entity_id", entity.id))
         "media_player" -> client.call("media_player", "media_play_pause", JSONObject().put("entity_id", entity.id))
         else -> client.call("homeassistant", "toggle", JSONObject().put("entity_id", entity.id))
     }
