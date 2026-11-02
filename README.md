@@ -2,8 +2,10 @@
 
 A home screen for Google TV, styled like Projectivy's app rows, that sits on top of the stock Google TV home instead of replacing it.
 
-- **Apps:** every app that shows in Google TV's app list, as wide banner cards. The card you're on grows and gets a white ring, its name shows big at the top, and the background takes on its colours.
-- **Inputs & settings:** the TV's HDMI inputs (only on a TV; a Chromecast or streaming box has none) and a TV settings card.
+- **Apps:** every app that shows in Google TV's app list, as wide banner cards. The card you're on grows and gets a white ring, its name shows big at the top, and the purple-blue background takes on its colours. The row shows straight away on a fresh start, from the last visit, while TV Home checks what's installed.
+- **Your order:** hold OK on an app for a small menu: **Move** (left and right, then OK), **Hide**, or **App info**. Hidden apps come back from the gear. New apps join the end of the row.
+- **Inputs:** the TV's HDMI inputs (only on a TV; a Chromecast or streaming box has none).
+- **Settings:** the gear at the top right opens a flyout from the right, like Google TV's, with **TV settings** first. **Light mode for slow TVs** turns off the colour glow and fades.
 - **Home button:** like Projectivy, an accessibility service opens TV Home when you press Home, or when you press Back out of an app and would land on the Google TV home. Turn it off in TV Home's settings (the gear, top right) and Home goes back to the stock Google TV screen. Nothing is replaced, so uninstalling TV Home leaves the TV exactly as it was.
 
 - **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. For Disney+, Binge and other apps, TV Home remembers the last show each one played (from Android's "now playing" info) and shows its name and picture. OK opens that app. These apps don't share their own continue-watching lists with other apps, so TV Home can't jump straight to the episode.

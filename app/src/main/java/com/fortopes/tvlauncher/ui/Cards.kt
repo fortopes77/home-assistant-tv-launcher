@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,10 +60,12 @@ fun BannerCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     container: Color = TvColors.Card,
+    onLongClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Card(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.width(CardWidth).aspectRatio(16f / 9f),
         shape = CardDefaults.shape(shape = CardShape),
         colors = CardDefaults.colors(containerColor = container, focusedContainerColor = container),
@@ -76,8 +79,28 @@ fun BannerCard(
 }
 
 @Composable
-fun AppCard(app: TvApp, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    BannerCard(onClick = onClick, modifier = modifier, container = if (app.banner == null) app.color.darken() else TvColors.Card) {
+fun AppCard(
+    app: TvApp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    moving: Boolean = false,
+) {
+    BannerCard(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier,
+        container = if (app.banner == null) app.color.darken() else TvColors.Card,
+    ) {
+        if (moving) {
+            // Arrows over the card while it's being moved.
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).zIndex(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("◀   ▶", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         when {
             app.banner != null -> Image(
                 bitmap = app.banner,

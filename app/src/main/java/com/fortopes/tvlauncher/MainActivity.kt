@@ -8,6 +8,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +72,10 @@ class MainActivity : ComponentActivity() {
     private var apps by mutableStateOf<List<TvApp>>(emptyList())
     private var inputs by mutableStateOf<List<TvInput>>(emptyList())
     private var loaded by mutableStateOf(false)
+    /** Every app, before your order and hidden apps are applied; [apps] is what the row shows. */
+    private var allApps: List<TvApp> = emptyList()
+    private var hiddenApps by mutableStateOf<List<Pair<String, String>>>(emptyList())
+    private var lightMode by mutableStateOf(false)
     private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, Camera, Dashboard }
 
     private var screen by mutableStateOf(Screen.Home)
@@ -127,9 +134,56 @@ class MainActivity : ComponentActivity() {
                             reloadContinue()
                         })
                     }
-                    Screen.Settings -> {
-                        BackHandler { screen = Screen.Home }
-                        SettingsScreen(
+                    // Settings is a flyout over the home screen, so the rows stay where you left them.
+                    Screen.Home, Screen.Settings -> {
+                        // On the home screen Back has nowhere to go; with settings open it closes them.
+                        BackHandler { if (screen == Screen.Settings) screen = Screen.Home }
+                        Box(Modifier.fillMaxSize()) {
+                            HomeScreen(
+                            continueItems = continueItems,
+                            continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
+                            apps = apps,
+                            inputs = inputs,
+                            home = home,
+                            loadCamera = ::loadCamera,
+                            loaded = loaded,
+                            lightMode = lightMode,
+                            settingsOpen = screen == Screen.Settings,
+                            resetSignal = resetSignal,
+                            onMoveApp = ::moveApp,
+                            onHideApp = {
+                                appRepo.hide(it)
+                                applyArrangement()
+                                toast("${it.label} hidden. Show it again from the gear.")
+                            },
+                            onAppInfo = {
+                                open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", it.component.packageName, null)))
+                            },
+                            onOpenContinue = {
+                                if (!continueRepo.open(it, (application as TvHomeApp).scope)) toast("Couldn't open ${it.sourceLabel}")
+                            },
+                            onOpenApp = { if (!appRepo.launch(it)) toast("Couldn't open ${it.label}") },
+                            onOpenInput = { if (!inputRepo.open(it)) toast("This TV didn't open ${it.label}") },
+                            onOpenLauncherSettings = { screen = Screen.Settings },
+                            onHaRun = ::runHa,
+                            onOpenCamera = {
+                                cameraStart = it
+                                screen = Screen.Camera
+                            },
+                            onOpenDashboard = {
+                                // Looking up a .local address can touch the network, so not on the main thread.
+                                lifecycleScope.launch {
+                                    dashboardUrl = withContext(Dispatchers.IO) { ha.dashboardUrl() }
+                                    screen = Screen.Dashboard
+                                }
+                            },
+                            onSetUpHa = {
+                                haSetupReturn = Screen.Home
+                                screen = Screen.HaSetup
+                            },
+                        )
+                            if (screen == Screen.Settings) {
+                                SettingsScreen(
                             overrideEnabled = overrideEnabled,
                             serviceEnabled = serviceEnabled,
                             serviceStartedAt = serviceStartedAt,
@@ -137,6 +191,16 @@ class MainActivity : ComponentActivity() {
                             jellyfinStatus = jellyfinStatus,
                             nowPlayingAccess = nowPlayingAccess,
                             haStatus = haStatus,
+                            lightMode = lightMode,
+                            hiddenApps = hiddenApps,
+                            onToggleLightMode = {
+                                prefs.lightMode = it
+                                lightMode = it
+                            },
+                            onUnhideApp = {
+                                appRepo.unhide(it)
+                                applyArrangement()
+                            },
                             version = BuildConfigVersion.name(this),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
@@ -177,43 +241,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                         )
-                    }
-                    Screen.Home -> {
-                        // This is the home screen, so Back has nowhere to go.
-                        BackHandler { }
-                        HomeScreen(
-                            continueItems = continueItems,
-                            continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
-                            apps = apps,
-                            inputs = inputs,
-                            home = home,
-                            loadCamera = ::loadCamera,
-                            loaded = loaded,
-                            resetSignal = resetSignal,
-                            onOpenContinue = {
-                                if (!continueRepo.open(it, (application as TvHomeApp).scope)) toast("Couldn't open ${it.sourceLabel}")
-                            },
-                            onOpenApp = { if (!appRepo.launch(it)) toast("Couldn't open ${it.label}") },
-                            onOpenInput = { if (!inputRepo.open(it)) toast("This TV didn't open ${it.label}") },
-                            onOpenTvSettings = ::openTvSettings,
-                            onOpenLauncherSettings = { screen = Screen.Settings },
-                            onHaRun = ::runHa,
-                            onOpenCamera = {
-                                cameraStart = it
-                                screen = Screen.Camera
-                            },
-                            onOpenDashboard = {
-                                // Looking up a .local address can touch the network, so not on the main thread.
-                                lifecycleScope.launch {
-                                    dashboardUrl = withContext(Dispatchers.IO) { ha.dashboardUrl() }
-                                    screen = Screen.Dashboard
-                                }
-                            },
-                            onSetUpHa = {
-                                haSetupReturn = Screen.Home
-                                screen = Screen.HaSetup
-                            },
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -224,6 +253,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         prefs.bypassStockHome = false
         overrideEnabled = prefs.overrideEnabled
+        lightMode = prefs.lightMode
         serviceEnabled = prefs.isServiceEnabled()
         refreshStatus()
         reload() // picks up apps installed or removed while we were away
@@ -248,14 +278,42 @@ class MainActivity : ComponentActivity() {
     private fun reload() {
         lifecycleScope.launch {
             loadLock.withLock {
+                // A fresh start: show the apps from last time at once, then check what's installed now.
+                if (allApps.isEmpty()) {
+                    val cached = withContext(Dispatchers.IO) { appRepo.loadCached() }
+                    if (cached.isNotEmpty()) {
+                        allApps = cached
+                        applyArrangement()
+                        loaded = true
+                    }
+                }
                 val (newApps, newInputs) = withContext(Dispatchers.IO) {
                     appRepo.loadApps() to inputRepo.loadInputs()
                 }
-                apps = newApps
+                allApps = newApps
+                applyArrangement()
                 inputs = newInputs
                 loaded = true
             }
         }
+    }
+
+    /** Applies your order and hidden apps to [allApps]. */
+    private fun applyArrangement() {
+        apps = appRepo.arrange(allApps)
+        val hide = appRepo.hidden
+        hiddenApps = allApps.filter { it.key in hide }.map { it.key to it.label }
+    }
+
+    /** Moves an app one place left (-1) or right (+1) in the row, and remembers the order. */
+    private fun moveApp(app: TvApp, by: Int) {
+        val list = apps.toMutableList()
+        val i = list.indexOfFirst { it.key == app.key }
+        val j = i + by
+        if (i < 0 || j !in list.indices) return
+        list.add(j, list.removeAt(i))
+        apps = list
+        appRepo.saveOrder(list)
     }
 
     private fun refreshStatus() {

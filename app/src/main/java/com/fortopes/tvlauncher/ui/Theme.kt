@@ -14,6 +14,14 @@ object TvColors {
     val Card = Color(0xFF1A1B22)
     val Text = Color(0xFFF4F4F6)
     val Muted = Color(0xFFA1A1AA)
+
+    // The home screen's background: deep purple into deep blue.
+    val BgPurple = Color(0xFF1E1048)
+    val BgIndigo = Color(0xFF121547)
+    val BgBlue = Color(0xFF0A2150)
+
+    /** The settings flyout. */
+    val Panel = Color(0xFF16152B)
 }
 
 @Composable

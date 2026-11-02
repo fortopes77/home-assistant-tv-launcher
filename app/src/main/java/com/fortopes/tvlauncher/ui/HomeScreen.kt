@@ -1,6 +1,23 @@
 package com.fortopes.tvlauncher.ui
 
 import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.tv.material3.ListItem
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -86,11 +103,11 @@ private sealed interface HomeRow {
 
     data class Inputs(val inputs: List<TvInput>) : HomeRow {
         override val key = "inputs"
-        override val title = "Inputs & settings"
+        override val title = "Inputs"
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     continueItems: List<ContinueItem>,
@@ -100,11 +117,15 @@ fun HomeScreen(
     home: HomeState?,
     loadCamera: suspend (String) -> ImageBitmap?,
     loaded: Boolean,
+    lightMode: Boolean,
+    settingsOpen: Boolean,
     resetSignal: Int,
+    onMoveApp: (TvApp, Int) -> Unit,
+    onHideApp: (TvApp) -> Unit,
+    onAppInfo: (TvApp) -> Unit,
     onOpenContinue: (ContinueItem) -> Unit,
     onOpenApp: (TvApp) -> Unit,
     onOpenInput: (TvInput) -> Unit,
-    onOpenTvSettings: () -> Unit,
     onOpenLauncherSettings: () -> Unit,
     onHaRun: (HaEntity) -> Unit,
     onOpenCamera: (Int) -> Unit,
@@ -118,16 +139,33 @@ fun HomeScreen(
             }
             if (apps.isNotEmpty()) add(HomeRow.Apps(apps))
             add(HomeRow.Home(home))
-            add(HomeRow.Inputs(inputs)) // always shown: it holds the TV settings card
+            if (inputs.isNotEmpty()) add(HomeRow.Inputs(inputs))
         }
     }
 
     var spotlight by remember { mutableStateOf<Spotlight?>(null) }
+    // Light mode keeps one colour, so the background never has to redraw.
     val accent by animateColorAsState(
-        targetValue = spotlight?.color ?: TvColors.Purple,
-        animationSpec = tween(durationMillis = 600),
+        targetValue = if (lightMode) TvColors.Purple else spotlight?.color ?: TvColors.Purple,
+        animationSpec = if (lightMode) snap<Color>() else tween<Color>(durationMillis = 600),
         label = "accent",
     )
+
+    // Hold OK on an app: a small menu, then Move (left and right) or Hide.
+    var menuApp by remember { mutableStateOf<TvApp?>(null) }
+    var movingKey by remember { mutableStateOf<String?>(null) }
+    var menuReturnKey by remember { mutableStateOf<String?>(null) }
+    val appFocus = remember { HashMap<String, FocusRequester>() }
+    val gearFocus = remember { FocusRequester() }
+    var settingsWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(settingsOpen) {
+        if (settingsOpen) settingsWasOpen = true
+        else if (settingsWasOpen) {
+            delay(50)
+            runCatching { gearFocus.requestFocus() }
+        }
+    }
+    BackHandler(enabled = menuApp != null) { menuApp = null }
 
     val columnState = rememberLazyListState()
     val rowStates = remember { HashMap<String, LazyListState>() }
@@ -147,19 +185,34 @@ fun HomeScreen(
             .fillMaxSize()
             .background(TvColors.Background)
             .drawBehind {
-                // A soft glow in the focused app's colour, top right, fading into the dark.
+                // Deep purple into deep blue, with a purple glow bottom left and a blue one top right.
+                drawRect(
+                    Brush.linearGradient(
+                        listOf(TvColors.BgPurple, TvColors.BgIndigo, TvColors.BgBlue),
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, 0f),
+                    ),
+                )
                 drawRect(
                     Brush.radialGradient(
-                        colors = listOf(accent.copy(alpha = 0.42f), Color.Transparent),
+                        colors = listOf(TvColors.Purple.copy(alpha = 0.28f), Color.Transparent),
+                        center = Offset(size.width * 0.1f, size.height * 0.95f),
+                        radius = size.width * 0.55f,
+                    ),
+                )
+                // The focused app's colour (blue in light mode), top right.
+                drawRect(
+                    Brush.radialGradient(
+                        colors = listOf((if (lightMode) TvColors.Blue else accent).copy(alpha = 0.34f), Color.Transparent),
                         center = Offset(size.width * 0.82f, size.height * 0.05f),
                         radius = size.width * 0.7f,
                     ),
                 )
-                drawRect(Brush.verticalGradient(listOf(Color.Transparent, TvColors.Background.copy(alpha = 0.85f))))
+                drawRect(Brush.verticalGradient(listOf(Color.Transparent, TvColors.Background.copy(alpha = 0.45f))))
             },
     ) {
         Column(Modifier.fillMaxSize()) {
-            TopBar(home?.weather, onOpenLauncherSettings)
+            TopBar(home?.weather, onOpenLauncherSettings, gearFocus)
 
             // The spotlight: the name of what's focused. Step 2 puts the continue-watching artwork here.
             Column(
@@ -242,13 +295,44 @@ fun HomeScreen(
                                     }
                                 }
                                 is HomeRow.Apps -> itemsIndexed(row.apps, key = { _, app -> app.key }) { i, app ->
+                                    val moving = movingKey == app.key
+                                    val bringIntoView = remember { BringIntoViewRequester() }
+                                    // Keep the card in view as it moves along the row.
+                                    if (moving) LaunchedEffect(i) { runCatching { bringIntoView.bringIntoView() } }
                                     AppCard(
                                         app = app,
                                         onClick = { onOpenApp(app) },
+                                        onLongClick = {
+                                            menuReturnKey = app.key
+                                            menuApp = app
+                                        },
+                                        moving = moving,
                                         modifier = Modifier
                                             .firstIf(isFirstRow && i == 0, firstCard)
+                                            .focusRequester(appFocus.getOrPut(app.key) { FocusRequester() })
+                                            .bringIntoViewRequester(bringIntoView)
+                                            .onPreviewKeyEvent { e ->
+                                                if (!moving) return@onPreviewKeyEvent false
+                                                when (e.key) {
+                                                    Key.DirectionLeft, Key.DirectionRight -> {
+                                                        if (e.type == KeyEventType.KeyDown) onMoveApp(app, if (e.key == Key.DirectionLeft) -1 else 1)
+                                                        true
+                                                    }
+                                                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Back, Key.Escape -> {
+                                                        if (e.type == KeyEventType.KeyUp) {
+                                                            movingKey = null
+                                                            spotlight = Spotlight(app.label, "App", app.color)
+                                                        }
+                                                        true
+                                                    }
+                                                    else -> true // stay on the card until you're done
+                                                }
+                                            }
                                             .onFocusChanged {
-                                                if (it.isFocused) spotlight = Spotlight(app.label, "App", app.color)
+                                                if (it.isFocused) {
+                                                    spotlight = if (moving) Spotlight(app.label, "Moving · left and right to move it · OK when done", app.color)
+                                                    else Spotlight(app.label, "App · hold OK to move or hide it", app.color)
+                                                }
                                             },
                                     )
                                 }
@@ -347,18 +431,6 @@ fun HomeScreen(
                                                 },
                                         )
                                     }
-                                    item(key = "tv-settings") {
-                                        GlyphCard(
-                                            label = "TV settings",
-                                            icon = R.drawable.ic_settings,
-                                            onClick = onOpenTvSettings,
-                                            modifier = Modifier
-                                                .firstIf(isFirstRow && row.inputs.isEmpty(), firstCard)
-                                                .onFocusChanged {
-                                                    if (it.isFocused) spotlight = Spotlight("TV settings", "Google TV settings", TvColors.Cyan)
-                                                },
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -366,6 +438,99 @@ fun HomeScreen(
                 }
             }
         }
+
+        menuApp?.let { app ->
+            AppMenu(
+                app = app,
+                onMove = {
+                    menuApp = null
+                    movingKey = app.key
+                    spotlight = Spotlight(app.label, "Moving · left and right to move it · OK when done", app.color)
+                },
+                onHide = {
+                    appFocus.remove(app.key)
+                    menuApp = null
+                    onHideApp(app)
+                },
+                onInfo = {
+                    menuApp = null
+                    onAppInfo(app)
+                },
+            )
+        }
+    }
+
+    // When the menu closes (Back, Move, or Hide), focus goes back to the app, or the first card if it's hidden.
+    LaunchedEffect(menuApp) {
+        val key = menuReturnKey
+        if (menuApp != null || key == null) return@LaunchedEffect
+        menuReturnKey = null
+        delay(50)
+        val back = appFocus[key]
+        if (back == null || runCatching { back.requestFocus() }.isFailure) runCatching { firstCard.requestFocus() }
+    }
+}
+
+/** The menu for an app, from holding OK: a small panel on the right, like Google TV's. */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun AppMenu(app: TvApp, onMove: () -> Unit, onHide: () -> Unit, onInfo: () -> Unit) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(app.key) { runCatching { first.requestFocus() } }
+    // The OK that opened the menu is still held; ignore it until it's let go, so it doesn't pick "Move".
+    var armed by remember { mutableStateOf(false) }
+    SidePanel(
+        width = 340.dp,
+        modifier = Modifier.onPreviewKeyEvent { e ->
+            val isOk = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+            when {
+                armed || !isOk -> false
+                e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0 -> {
+                    armed = true // a fresh press: the first one was already let go
+                    false
+                }
+                else -> {
+                    if (e.type == KeyEventType.KeyUp) armed = true
+                    true
+                }
+            }
+        },
+    ) {
+        Text(app.label, color = TvColors.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
+        ListItem(selected = false, onClick = onMove, modifier = Modifier.focusRequester(first), headlineContent = { Text("Move") },
+            supportingContent = { Text("Left and right to move it, OK when done") })
+        ListItem(selected = false, onClick = onHide, headlineContent = { Text("Hide") },
+            supportingContent = { Text("Show it again from the gear") })
+        ListItem(selected = false, onClick = onInfo, headlineContent = { Text("App info") },
+            supportingContent = { Text("Android's page for it: update, clear, uninstall") })
+    }
+}
+
+/**
+ * A flyout from the right over a dimmed screen, like Google TV's settings. Focus can't leave it, so the
+ * rows behind stay put until it closes.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun SidePanel(
+    width: androidx.compose.ui.unit.Dp = 440.dp,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f))) {
+        Column(
+            modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(width)
+                .background(TvColors.Panel)
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            content = content,
+        )
     }
 }
 
@@ -373,7 +538,7 @@ private fun Modifier.firstIf(condition: Boolean, requester: FocusRequester): Mod
     if (condition) focusRequester(requester) else this
 
 @Composable
-private fun TopBar(weather: String?, onOpenLauncherSettings: () -> Unit) {
+private fun TopBar(weather: String?, onOpenLauncherSettings: () -> Unit, gearFocus: FocusRequester) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -389,7 +554,7 @@ private fun TopBar(weather: String?, onOpenLauncherSettings: () -> Unit) {
         Spacer(Modifier.width(16.dp))
         IconButton(
             onClick = onOpenLauncherSettings,
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(36.dp).focusRequester(gearFocus),
         ) {
             Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = "TV Home settings", modifier = Modifier.size(20.dp))
         }
