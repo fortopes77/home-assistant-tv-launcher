@@ -16,7 +16,7 @@ internal object Http {
         body: String? = null,
         timeoutMs: Int = 6000,
     ): String {
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val conn = URL(Mdns.rewrite(url)).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
             conn.connectTimeout = timeoutMs

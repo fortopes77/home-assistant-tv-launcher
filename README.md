@@ -12,13 +12,13 @@ A home screen for Google TV, styled like Projectivy's app rows, that sits on top
 
 ## Connect Home Assistant
 
-Press OK on **Connect** in the Home row (or in the gear's Home Assistant section). The TV shows a QR code. Scan it with your phone on the same Wi-Fi, and fill in:
+Press OK on **Connect** in the Home row (or in the gear's Home Assistant section), and fill in the boxes on the TV. The Google Home app's TV remote keyboard can type or paste into them from your phone, which is easiest for the long token. Or scan the QR code and fill them in on your phone's browser (the phone has to be on the same network as the TV). You need:
 
-- your Home Assistant address, such as `http://homeassistant.local:8123`
+- your Home Assistant address, such as `cunn-ha.local:8123` (`.local` names work)
 - a long-lived access token (in Home Assistant: your profile → Security → Create token). A separate, non-administrator user is a good idea, as with the dashboard.
 - optionally, the room the TV is in, so its lights show in the row
 
-The page sends them to the TV, which checks they work. Nothing is typed with the remote. **Full dashboard** expects the dashboard at `/local/dashboard/index.html`, where its README installs it.
+The TV checks they work before saving. **Full dashboard** expects the dashboard at `/local/dashboard/index.html`, where its README installs it.
 
 ## Set up Continue watching
 

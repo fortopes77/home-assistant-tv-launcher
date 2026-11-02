@@ -89,7 +89,7 @@ class HaClient(private val store: HaStore) {
 
     /** A camera's current picture as JPEG bytes. */
     fun cameraImage(entityId: String): ByteArray {
-        val conn = java.net.URL("$base/api/camera_proxy/$entityId?t=${System.currentTimeMillis()}").openConnection() as java.net.HttpURLConnection
+        val conn = java.net.URL(Mdns.rewrite("$base/api/camera_proxy/$entityId?t=${System.currentTimeMillis()}")).openConnection() as java.net.HttpURLConnection
         try {
             conn.connectTimeout = 6000
             conn.readTimeout = 10_000
@@ -102,7 +102,7 @@ class HaClient(private val store: HaStore) {
     }
 
     /** The dashboard's TV screen, for the full dashboard card. */
-    fun dashboardUrl(): String = "$base/local/dashboard/index.html?tv&open=intent&token=${store.token}"
+    fun dashboardUrl(): String = Mdns.rewrite("$base/local/dashboard/index.html?tv&open=intent&token=${store.token}")
 
     companion object {
         fun normaliseUrl(input: String): String {

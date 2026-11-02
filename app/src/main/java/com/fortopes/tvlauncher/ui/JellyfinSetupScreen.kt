@@ -113,7 +113,8 @@ fun JellyfinSetupScreen(client: JellyfinClient, onDone: () -> Unit) {
                         supportingContent = { Text(server.url) },
                     )
                 }
-                AddressField(
+                TvTextField(
+                    label = "Or type the address, like 192.168.1.20 or jellyfin.local:8096",
                     value = typed,
                     onValueChange = { typed = it },
                     onSubmit = { if (typed.isNotBlank()) connect(JellyfinServer(typed, JellyfinClient.normaliseUrl(typed))) },
@@ -164,31 +165,3 @@ fun JellyfinSetupScreen(client: JellyfinClient, onDone: () -> Unit) {
     }
 }
 
-/** A text box for the server address. Pressing OK on it brings up the TV keyboard. */
-@Composable
-private fun AddressField(value: String, onValueChange: (String) -> Unit, onSubmit: () -> Unit, modifier: Modifier) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    Column(modifier.fillMaxWidth()) {
-        Text("Or type the address, like 192.168.1.20 or jellyfin.local:8096", color = TvColors.Muted, fontSize = 13.sp)
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            interactionSource = interaction,
-            textStyle = TextStyle(color = TvColors.Text, fontSize = 18.sp),
-            cursorBrush = SolidColor(TvColors.Text),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = { onSubmit() }, onDone = { onSubmit() }),
-            modifier = Modifier
-                .padding(top = 6.dp)
-                .fillMaxWidth()
-                .background(TvColors.Card, RoundedCornerShape(8.dp))
-                .border(
-                    BorderStroke(if (focused) 3.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.2f)),
-                    RoundedCornerShape(8.dp),
-                )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-        )
-    }
-}

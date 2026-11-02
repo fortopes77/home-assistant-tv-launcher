@@ -37,7 +37,7 @@ fun DashboardScreen(url: String, onClose: () -> Unit) {
                     return true
                 }
             }
-            loadUrl(url)
+            loadUrl(url) // the caller already swapped a .local host for its IP
             requestFocus()
         }
     }
