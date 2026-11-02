@@ -14,18 +14,26 @@ GitHub builds it on every push (**Actions → Build APK**, the `tv-home-apk` dow
 
 To build it yourself: `./gradlew assembleDebug` with the Android SDK installed, and the APK is `app/build/outputs/apk/debug/app-debug.apk`.
 
-## Install it on the TV with ADB
+## Install it on the TV (no computer needed)
 
-You need ADB on a computer on the same network as the TV ([Android platform tools](https://developer.android.com/tools/releases/platform-tools)).
+1. Install **Downloader** (by AFTVnews) from the Play Store on the TV.
+2. In Downloader, type the APK's address: `https://github.com/fortopes77/home-assistant-tv-launcher/releases/download/latest/tv-home.apk`. The first time, the TV asks you to let Downloader install apps. Allow it, then install.
+3. Turn on the Home button service: Settings → System → Accessibility → **TV Home: Home button** → On. It's the same place you'd switch on Projectivy's.
+4. **Press Home.** TV Home opens. The gear at the top right has the on/off toggle, shows whether the service is on, and has **Open the Google TV home** to visit the stock home once without turning anything off.
+
+To update, do step 2 again. Every build is signed with the same key from `keystore/`, so it installs over the old one and keeps your settings.
+
+## If the accessibility switch is greyed out: ADB
+
+Newer Google TV versions can block the accessibility switch for apps that didn't come from the Play Store. ADB gets around that. You need ADB on a computer on the same network as the TV ([Android platform tools](https://developer.android.com/tools/releases/platform-tools)).
 
 1. **Turn on developer options on the TV.** Settings → System → About, then press OK on **Android TV OS build** seven times.
 2. **Turn on debugging.** Settings → System → Developer options:
    - **Wireless debugging** (newer Google TVs): turn it on, open it, and choose **Pair device with pairing code**. On the computer run `adb pair <ip>:<pairing port>` and type the code, then `adb connect <ip>:<port>` using the port shown on the Wireless debugging screen (it's a different one).
    - **USB debugging / Network debugging** (older ones): turn it on, then run `adb connect <tv-ip>:5555` and accept the prompt on the TV.
-   
-   `adb devices` should now list the TV.
-3. **Install:** `adb install -r tv-home.apk`. The `-r` installs over an older version, keeping your settings. Every build is signed with the same key from `keystore/`, so updates always install over the top.
-4. **Turn on the Home button service.** First see what's already on:
+
+   `adb devices` should now list the TV. You can also install from here with `adb install -r tv-home.apk`.
+3. **Turn on the service.** First see what's already on:
 
    ```sh
    adb shell settings get secure enabled_accessibility_services
@@ -38,23 +46,21 @@ You need ADB on a computer on the same network as the TV ([Android platform tool
    adb shell settings put secure accessibility_enabled 1
    ```
 
-   If it printed something (another app's service), keep it and add ours after a colon, for example:
+   If it printed something (another app's service, such as Projectivy's), keep it and add ours after a colon:
 
    ```sh
    adb shell settings put secure enabled_accessibility_services <what it printed>:com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.HomeButtonService
    adb shell settings put secure accessibility_enabled 1
    ```
 
-   You can also do this on the TV in Settings → System → Accessibility → **TV Home: Home button**. ADB is the sure way: Android 13 and later can block that switch for apps installed from a file manager.
-5. **Press Home.** TV Home opens. The gear at the top right has the on/off toggle, shows whether the service is on, and has **Open the Google TV home** to visit the stock home once without turning anything off.
-
-To remove it: `adb uninstall com.fortopes.tvlauncher`.
+To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstall com.fortopes.tvlauncher`.
 
 ## Good to know
 
 - The service asks for window changes and key presses only. It can't read what's on the screen.
 - While the toggle is on, a **long** press of Home is caught too, so Google TV's long-press panel doesn't open. Use the gear or the TV settings card for settings.
-- If Home stops opening TV Home after a TV update, check the service is still on (the gear shows it) and run step 4 again.
+- If Home stops opening TV Home after a TV update, check the service is still on (the gear shows it) and switch it on again.
+- If Projectivy's Home button override is also on, turn one of them off so they don't fight over the Home button.
 
 ## Code map
 
