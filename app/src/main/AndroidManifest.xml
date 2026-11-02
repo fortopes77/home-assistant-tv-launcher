@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The TV's shared "watch next" list, where apps like Disney+ put what you're part-way through. -->
+    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
+
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
@@ -14,6 +18,7 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
         </intent>
+        <package android:name="org.jellyfin.androidtv" />
     </queries>
 
     <application
@@ -23,6 +28,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.TvHome">
 
         <!-- Not a HOME activity on purpose: the stock Google TV home stays the system's home screen,

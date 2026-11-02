@@ -49,4 +49,5 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.tv.material)
+    implementation(libs.coil.compose)
 }
