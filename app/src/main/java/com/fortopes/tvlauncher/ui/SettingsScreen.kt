@@ -34,6 +34,7 @@ fun SettingsScreen(
     lastError: String?,
     jellyfinStatus: String?,
     watchNextAllowed: Boolean,
+    watchNextSummary: String?,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -153,7 +154,8 @@ fun SettingsScreen(
             headlineContent = { Text("Disney+, Binge and other apps") },
             supportingContent = {
                 Text(
-                    if (watchNextAllowed) "Allowed. Shows what apps share in the TV's watch next list. An app that doesn't share won't show."
+                    if (watchNextAllowed) "Allowed. Shows what apps share in the TV's watch next list. An app that doesn't share won't show." +
+                        (watchNextSummary?.let { "\nRight now: $it." } ?: "")
                     else "Press OK and allow TV Home to see the TV's watch next list, where apps like Disney+ put what you're watching.",
                 )
             },

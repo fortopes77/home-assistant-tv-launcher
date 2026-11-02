@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private var continueItems by mutableStateOf<List<ContinueItem>>(emptyList())
     private var jellyfinStatus by mutableStateOf<String?>(null)
     private var watchNextAllowed by mutableStateOf(false)
+    private var watchNextSummary by mutableStateOf<String?>(null)
     private var overrideEnabled by mutableStateOf(true)
     private var serviceEnabled by mutableStateOf(false)
     private var serviceStartedAt by mutableStateOf(0L)
@@ -97,6 +98,7 @@ class MainActivity : ComponentActivity() {
                             lastError = lastError,
                             jellyfinStatus = jellyfinStatus,
                             watchNextAllowed = watchNextAllowed,
+                            watchNextSummary = watchNextSummary,
                             version = BuildConfigVersion.name(this),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
@@ -194,6 +196,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { continueRepo.load() }
             continueItems = result.items
+            watchNextSummary = withContext(Dispatchers.IO) { runCatching { watchNext.summary() }.getOrNull() }
             if (result.jellyfinError != null && jellyfinStore.isSignedIn) {
                 jellyfinStatus = "${result.jellyfinError}. Press OK to sign in again."
             }

@@ -46,6 +46,37 @@ class WatchNextRepository(context: Context) {
         }
     }
 
+    /**
+     * What TV Home can see in the list, for the settings screen: "3 items: YouTube (2), Disney+ (1)".
+     * Nothing at all from any app means Android only shows TV Home its own entries.
+     */
+    fun summary(): String {
+        if (!hasPermission) return "not allowed"
+        val pm = appContext.packageManager
+        val counts = LinkedHashMap<String, Int>()
+        val cursor = runCatching {
+            appContext.contentResolver.query(
+                TvContract.WatchNextPrograms.CONTENT_URI,
+                arrayOf(TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME),
+                null,
+                null,
+                null,
+            )
+        }.getOrElse { return "couldn't read it (${it.javaClass.simpleName})" } ?: return "couldn't read it"
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                val pkg = c.getString(0) ?: "?"
+                counts[pkg] = (counts[pkg] ?: 0) + 1
+            }
+        }
+        if (counts.isEmpty()) return "TV Home can see 0 items from any app"
+        val parts = counts.entries.joinToString(", ") { (pkg, n) ->
+            val label = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+            "$label ($n)"
+        }
+        return "TV Home can see ${counts.values.sum()} items: $parts"
+    }
+
     private fun Cursor.toItem(label: (String) -> String): ContinueItem? {
         val pkg = string(TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME) ?: return null
         if (pkg == appContext.packageName || pkg == JellyfinClient.JELLYFIN_PACKAGE) return null // Jellyfin comes from its own API
