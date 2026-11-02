@@ -1,6 +1,7 @@
 package com.fortopes.tvlauncher
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -40,6 +41,8 @@ class MainActivity : ComponentActivity() {
     private var showSettings by mutableStateOf(false)
     private var overrideEnabled by mutableStateOf(true)
     private var serviceEnabled by mutableStateOf(false)
+    private var serviceStartedAt by mutableStateOf(0L)
+    private var lastError by mutableStateOf<String?>(null)
     private var resetSignal by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +58,8 @@ class MainActivity : ComponentActivity() {
                     SettingsScreen(
                         overrideEnabled = overrideEnabled,
                         serviceEnabled = serviceEnabled,
+                        serviceStartedAt = serviceStartedAt,
+                        lastError = lastError,
                         version = BuildConfigVersion.name(this),
                         onToggleOverride = {
                             prefs.overrideEnabled = it
@@ -63,6 +68,13 @@ class MainActivity : ComponentActivity() {
                         onOpenAccessibilitySettings = { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                         onOpenStockHome = ::openStockHome,
                         onOpenTvSettings = ::openTvSettings,
+                        onOpenAppInfo = {
+                            open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                        },
+                        onClearError = {
+                            prefs.clearError()
+                            lastError = null
+                        },
                     )
                 } else {
                     // This is the home screen, so Back has nowhere to go.
@@ -87,6 +99,8 @@ class MainActivity : ComponentActivity() {
         prefs.bypassStockHome = false
         overrideEnabled = prefs.overrideEnabled
         serviceEnabled = prefs.isServiceEnabled()
+        serviceStartedAt = prefs.serviceStartedAt
+        lastError = prefs.lastError
         reload() // picks up apps installed or removed while we were away
     }
 

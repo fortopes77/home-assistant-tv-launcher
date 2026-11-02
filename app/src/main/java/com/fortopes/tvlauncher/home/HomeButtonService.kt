@@ -29,17 +29,36 @@ class HomeButtonService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = LauncherPrefs(this)
-        stockHomePackages = findStockHomePackages(this)
+        prefs.serviceStartedAt = System.currentTimeMillis()
+        stockHomePackages = runCatching { findStockHomePackages(this) }
+            .onFailure { prefs.recordError("Home button service start", it) }
+            .getOrDefault(KNOWN_STOCK_HOMES)
     }
 
-    override fun onKeyEvent(event: KeyEvent): Boolean {
+    // Never let an error escape: Android switches off an accessibility service that crashes.
+    override fun onKeyEvent(event: KeyEvent): Boolean = try {
+        handleKey(event)
+    } catch (e: Exception) {
+        report("Home button", e)
+        false
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        try {
+            handleWindowChange(event)
+        } catch (e: Exception) {
+            report("Window change", e)
+        }
+    }
+
+    private fun handleKey(event: KeyEvent): Boolean {
         if (event.keyCode != KeyEvent.KEYCODE_HOME || !active() || prefs.bypassStockHome) return false
         // Swallow both the press and the release so the stock home never sees it; open on release.
         if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) openLauncher()
         return true
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+    private fun handleWindowChange(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || !active()) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg in stockHomePackages) {
@@ -51,6 +70,10 @@ class HomeButtonService : AccessibilityService() {
     }
 
     override fun onInterrupt() = Unit
+
+    private fun report(where: String, e: Exception) {
+        if (::prefs.isInitialized) runCatching { prefs.recordError(where, e) }
+    }
 
     private fun active(): Boolean = ::prefs.isInitialized && prefs.overrideEnabled
 
@@ -79,7 +102,7 @@ class HomeButtonService : AccessibilityService() {
         )
 
         /** Stock launchers: Google TV, Android TV, and the old Leanback launcher. */
-        private val KNOWN_STOCK_HOMES = setOf(
+        val KNOWN_STOCK_HOMES = setOf(
             "com.google.android.apps.tv.launcherx",
             "com.google.android.tvlauncher",
             "com.google.android.leanbacklauncher",
