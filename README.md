@@ -6,7 +6,7 @@ A home screen for Google TV, styled like Projectivy's app rows, that sits on top
 - **Inputs & settings:** the TV's HDMI inputs (only on a TV; a Chromecast or streaming box has none) and a TV settings card.
 - **Home button:** like Projectivy, an accessibility service opens TV Home when you press Home, or when you press Back out of an app and would land on the Google TV home. Turn it off in TV Home's settings (the gear, top right) and Home goes back to the stock Google TV screen. Nothing is replaced, so uninstalling TV Home leaves the TV exactly as it was.
 
-- **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. Disney+, Binge and other apps come from the TV's own "watch next" list, and OK takes you back into the app at that show.
+- **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. For Disney+, Binge and other apps, TV Home remembers the last show each one played (from Android's "now playing" info) and shows its name and picture. OK opens that app. These apps don't share their own continue-watching lists with other apps, so TV Home can't jump straight to the episode.
 
 Still to come: a Home Assistant panel based on the dashboard's `tv` view.
 
@@ -15,7 +15,13 @@ Still to come: a Home Assistant panel based on the dashboard's `tv` view.
 Open TV Home's settings (the gear, top right). Nothing needs typing:
 
 - **Jellyfin:** press OK on Jellyfin. TV Home finds your server on the network and shows a code. On your phone, open the Jellyfin app → Settings → **Quick Connect** and enter it. (If the TV says Quick Connect is off, turn it on in Jellyfin's Dashboard → General.) If the server isn't found, type its address in the box, like `192.168.1.20`.
-- **Disney+, Binge and other apps:** press OK and allow TV Home to see the watch next list. Each app decides whether it shares what you're watching there, so an app that doesn't share won't show up. Jellyfin's own entries in that list are skipped, since they come from the server instead.
+- **Disney+, Binge and other apps:** TV Home needs notification access to see what's playing (it doesn't read or change your notifications). Android blocks that for sideloaded apps, so turn it on with ADB (see below):
+
+  ```sh
+  adb shell cmd notification allow_listener com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.NowPlayingListener
+  ```
+
+  After that, anything you play in Disney+ or Binge shows up in Continue watching.
 
 ## Get the APK
 
@@ -32,14 +38,14 @@ To build it yourself: `./gradlew assembleDebug` with the Android SDK installed, 
 
 To update, do step 2 again. Every build is signed with the same key from `keystore/`, so it installs over the old one and keeps your settings.
 
-## If the accessibility switch is greyed out: ADB
+## ADB: unblock the Home button and Continue watching
 
-Newer Google TV versions can block the accessibility switch for apps that didn't come from the Play Store. ADB gets around that. You need ADB on a computer on the same network as the TV ([Android platform tools](https://developer.android.com/tools/releases/platform-tools)).
+Android blocks two things for apps that didn't come from the Play Store: the accessibility switch (the Home button) and notification access (remembering what Disney+ and Binge play). If the switch turns itself off or the gear says it never started, a few ADB commands get around that. You need ADB on a computer on the same network as the TV ([Android platform tools](https://developer.android.com/tools/releases/platform-tools)).
 
 1. **Turn on developer options on the TV.** Settings → System → About, then press OK on **Android TV OS build** seven times.
 2. **Turn on debugging.** Settings → System → Developer options:
    - **Wireless debugging** (newer Google TVs): turn it on, open it, and choose **Pair device with pairing code**. On the computer run `adb pair <ip>:<pairing port>` and type the code, then `adb connect <ip>:<port>` using the port shown on the Wireless debugging screen (it's a different one).
-   - **USB debugging / Network debugging** (older ones): turn it on, then run `adb connect <tv-ip>:5555` and accept the prompt on the TV.
+   - **USB debugging / Network debugging:** turn it on, then run `adb connect <tv-ip>:5555` and accept the prompt on the TV. This can work over ethernet, without wireless debugging.
 
    `adb devices` should now list the TV. You can also install from here with `adb install -r tv-home.apk`.
 3. **Lift the block, then use the switch on the TV.** This is the simplest fix, and it leaves other apps' accessibility services (such as Projectivy's) alone:
@@ -70,6 +76,12 @@ Newer Google TV versions can block the accessibility switch for apps that didn't
    adb shell settings put secure accessibility_enabled 1
    ```
 
+4. **Turn on "remember what's playing"** for Continue watching (Disney+, Binge):
+
+   ```sh
+   adb shell cmd notification allow_listener com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.NowPlayingListener
+   ```
+
 To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstall com.fortopes.tvlauncher`.
 
 ## Good to know
@@ -88,7 +100,9 @@ To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstal
 | `.../data/AppRepository.kt` | Lists Google TV apps with their banners and colours, and opens them |
 | `.../data/InputRepository.kt` | Lists HDMI inputs and switches to them |
 | `.../data/JellyfinClient.kt` | Finds the Jellyfin server, Quick Connect sign-in, the resume list, and starting playback on the TV |
-| `.../data/WatchNextRepository.kt` | Reads the TV's watch next list (Disney+, Binge, ...) |
+| `.../data/WatchNextRepository.kt` | Reads the TV's watch next list, for apps that share to it |
+| `.../home/NowPlayingListener.kt` | Watches "now playing" and remembers the last show each app played |
+| `.../data/NowPlayingStore.kt` | Stores those shows and turns them into Continue watching cards |
 | `.../data/ContinueWatchingRepository.kt` | Merges the two into one row and opens items |
 | `.../ui/JellyfinSetupScreen.kt` | The no-typing Jellyfin sign-in |
 | `.../data/LauncherPrefs.kt` | The on/off toggle and the "open Google TV home once" flag |

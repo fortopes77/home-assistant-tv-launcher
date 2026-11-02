@@ -5,11 +5,15 @@ import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** The Continue watching row: Jellyfin's resume list plus the TV's watch next list (Disney+, Binge, ...). */
+/**
+ * The Continue watching row: Jellyfin's resume list, the TV's watch next list when apps share to it, and
+ * the last show each other app played (Disney+, Binge, ...).
+ */
 class ContinueWatchingRepository(
     context: Context,
     private val jellyfin: JellyfinClient,
     private val watchNext: WatchNextRepository,
+    private val nowPlaying: NowPlayingStore,
     private val prefs: LauncherPrefs,
 ) {
     private val appContext = context.applicationContext
@@ -23,7 +27,10 @@ class ContinueWatchingRepository(
                 jellyfinError = if (it is HttpException && it.code == 401) "Jellyfin sign-in expired" else "Couldn't reach Jellyfin"
             }
             .getOrDefault(emptyList())
-        val fromApps = runCatching { watchNext.load() }.getOrDefault(emptyList())
+        val fromWatchNext = runCatching { watchNext.load() }.getOrDefault(emptyList())
+        val fromNowPlaying = runCatching { nowPlaying.items() }.getOrDefault(emptyList())
+        // An app in the watch next list is better (it opens the exact show), so it wins over a remembered one.
+        val fromApps = fromWatchNext + fromNowPlaying.filter { np -> fromWatchNext.none { it.sourcePackage == np.sourcePackage } }
         // Newest first across all apps; items with no time (rare) go last.
         val items = (fromJellyfin + fromApps).sortedByDescending { it.lastWatched }.take(20)
         return Result(items, jellyfinError)
