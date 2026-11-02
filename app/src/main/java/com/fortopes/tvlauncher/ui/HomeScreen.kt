@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,8 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.Text
 import com.fortopes.tvlauncher.R
 import com.fortopes.tvlauncher.data.ContinueItem
+import com.fortopes.tvlauncher.data.HaEntity
+import com.fortopes.tvlauncher.data.HomeState
 import com.fortopes.tvlauncher.data.TvApp
 import com.fortopes.tvlauncher.data.TvInput
 import kotlinx.coroutines.delay
@@ -59,8 +62,7 @@ import java.util.Date
 private data class Spotlight(val title: String, val subtitle: String, val color: Color)
 
 /**
- * The rows on the home screen, top to bottom. Step 3 adds the Home Assistant panel based on the
- * dashboard's `tv` view.
+ * The rows on the home screen, top to bottom.
  */
 private sealed interface HomeRow {
     val key: String
@@ -76,6 +78,12 @@ private sealed interface HomeRow {
         override val title = "Apps"
     }
 
+    /** Home Assistant: a camera, scenes and scripts, the TV room's lights, what's playing, the full dashboard. */
+    data class Home(val state: HomeState?) : HomeRow {
+        override val key = "home"
+        override val title = "Home"
+    }
+
     data class Inputs(val inputs: List<TvInput>) : HomeRow {
         override val key = "inputs"
         override val title = "Inputs & settings"
@@ -89,6 +97,8 @@ fun HomeScreen(
     continueNeedsSetup: Boolean,
     apps: List<TvApp>,
     inputs: List<TvInput>,
+    home: HomeState?,
+    loadCamera: suspend (String) -> ImageBitmap?,
     loaded: Boolean,
     resetSignal: Int,
     onOpenContinue: (ContinueItem) -> Unit,
@@ -96,15 +106,19 @@ fun HomeScreen(
     onOpenInput: (TvInput) -> Unit,
     onOpenTvSettings: () -> Unit,
     onOpenLauncherSettings: () -> Unit,
+    onHaRun: (HaEntity) -> Unit,
+    onOpenCamera: (Int) -> Unit,
+    onOpenDashboard: () -> Unit,
+    onSetUpHa: () -> Unit,
 ) {
-    val rows = remember(continueItems, continueNeedsSetup, apps, inputs) {
+    val rows = remember(continueItems, continueNeedsSetup, apps, inputs, home) {
         buildList {
             if (continueItems.isNotEmpty() || continueNeedsSetup) {
                 add(HomeRow.ContinueWatching(continueItems, showSetup = continueItems.isEmpty()))
             }
             if (apps.isNotEmpty()) add(HomeRow.Apps(apps))
+            add(HomeRow.Home(home))
             add(HomeRow.Inputs(inputs)) // always shown: it holds the TV settings card
-            // Step 3: add the Home Assistant panel here.
         }
     }
 
@@ -145,7 +159,7 @@ fun HomeScreen(
             },
     ) {
         Column(Modifier.fillMaxSize()) {
-            TopBar(onOpenLauncherSettings)
+            TopBar(home?.weather, onOpenLauncherSettings)
 
             // The spotlight: the name of what's focused. Step 2 puts the continue-watching artwork here.
             Column(
@@ -238,6 +252,91 @@ fun HomeScreen(
                                             },
                                     )
                                 }
+                                is HomeRow.Home -> {
+                                    val state = row.state
+                                    fun Modifier.spot(title: String, sub: String, i: Int) = this
+                                        .firstIf(isFirstRow && i == 0, firstCard)
+                                        .onFocusChanged { if (it.isFocused) spotlight = Spotlight(title, sub, TvColors.Cyan) }
+                                    if (state == null) {
+                                        item(key = "ha-setup") {
+                                            GlyphCard(
+                                                label = "Connect",
+                                                icon = R.drawable.ic_home_glyph,
+                                                onClick = onSetUpHa,
+                                                modifier = Modifier.spot("Home Assistant", "Connect from your phone with a QR code", 0),
+                                            )
+                                        }
+                                    } else if (state.error != null) {
+                                        item(key = "ha-error") {
+                                            GlyphCard(
+                                                label = "Reconnect",
+                                                icon = R.drawable.ic_home_glyph,
+                                                onClick = onSetUpHa,
+                                                modifier = Modifier.spot(state.error, "Press OK to connect again", 0),
+                                            )
+                                        }
+                                    } else {
+                                        var n = 0
+                                        state.cameras.firstOrNull()?.let { cam ->
+                                            val i = n++
+                                            item(key = "cam") {
+                                                CameraCard(
+                                                    name = cam.name,
+                                                    loadImage = { loadCamera(cam.id) },
+                                                    onClick = { onOpenCamera(0) },
+                                                    modifier = Modifier.spot(cam.name, "Camera · OK for full screen, left and right for others", i),
+                                                )
+                                            }
+                                        }
+                                        state.nowPlaying?.let { p ->
+                                            val i = n++
+                                            val title = p.attributes.optString("media_title").ifBlank { p.name }
+                                            item(key = "playing") {
+                                                GlyphCard(
+                                                    label = title,
+                                                    icon = R.drawable.ic_music,
+                                                    onClick = { onHaRun(p) },
+                                                    active = p.state == "playing",
+                                                    detail = p.name,
+                                                    modifier = Modifier.spot(title, "${p.name} · OK to ${if (p.state == "playing") "pause" else "play"}", i),
+                                                )
+                                            }
+                                        }
+                                        state.lights.forEach { light ->
+                                            val i = n++
+                                            item(key = light.id) {
+                                                GlyphCard(
+                                                    label = light.name,
+                                                    icon = R.drawable.ic_bulb,
+                                                    onClick = { onHaRun(light) },
+                                                    active = light.isOn,
+                                                    detail = if (light.isOn) "On" else "Off",
+                                                    modifier = Modifier.spot(light.name, "Light · OK to turn ${if (light.isOn) "off" else "on"}", i),
+                                                )
+                                            }
+                                        }
+                                        state.actions.forEach { a ->
+                                            val i = n++
+                                            item(key = a.id) {
+                                                GlyphCard(
+                                                    label = a.name,
+                                                    icon = R.drawable.ic_play,
+                                                    onClick = { onHaRun(a) },
+                                                    modifier = Modifier.spot(a.name, if (a.domain == "scene") "Scene · OK to set it" else "Script · OK to run it", i),
+                                                )
+                                            }
+                                        }
+                                        val i = n
+                                        item(key = "dashboard") {
+                                            GlyphCard(
+                                                label = "Full dashboard",
+                                                icon = R.drawable.ic_dashboard,
+                                                onClick = onOpenDashboard,
+                                                modifier = Modifier.spot("Full dashboard", "Your Home Assistant TV screen: cameras, calendar, solar, rooms", i),
+                                            )
+                                        }
+                                    }
+                                }
                                 is HomeRow.Inputs -> {
                                     itemsIndexed(row.inputs, key = { _, input -> input.id }) { i, input ->
                                         GlyphCard(
@@ -277,7 +376,7 @@ private fun Modifier.firstIf(condition: Boolean, requester: FocusRequester): Mod
     if (condition) focusRequester(requester) else this
 
 @Composable
-private fun TopBar(onOpenLauncherSettings: () -> Unit) {
+private fun TopBar(weather: String?, onOpenLauncherSettings: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -285,6 +384,10 @@ private fun TopBar(onOpenLauncherSettings: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.weight(1f))
+        if (weather != null) {
+            Text(text = weather, color = TvColors.Muted, fontSize = 18.sp)
+            Spacer(Modifier.width(20.dp))
+        }
         Clock()
         Spacer(Modifier.width(16.dp))
         IconButton(

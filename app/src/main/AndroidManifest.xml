@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- To show the TV's own address in the QR code for setting things up from your phone. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The TV's shared "watch next" list, where apps like Disney+ put what you're part-way through. -->
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
 

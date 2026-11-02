@@ -8,7 +8,17 @@ A home screen for Google TV, styled like Projectivy's app rows, that sits on top
 
 - **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. For Disney+, Binge and other apps, TV Home remembers the last show each one played (from Android's "now playing" info) and shows its name and picture. OK opens that app. These apps don't share their own continue-watching lists with other apps, so TV Home can't jump straight to the episode.
 
-Still to come: a Home Assistant panel based on the dashboard's `tv` view.
+- **Home:** a row for Home Assistant. It has your front door camera (OK for full screen, left and right for the others), what's playing, the lights in the TV's room, your scenes and scripts (such as Movie mode and Good night), and **Full dashboard**, which opens the dashboard's TV screen (`?tv`) inside TV Home for cameras, calendar, solar and rooms. The weather sits next to the clock.
+
+## Connect Home Assistant
+
+Press OK on **Connect** in the Home row (or in the gear's Home Assistant section). The TV shows a QR code. Scan it with your phone on the same Wi-Fi, and fill in:
+
+- your Home Assistant address, such as `http://homeassistant.local:8123`
+- a long-lived access token (in Home Assistant: your profile → Security → Create token). A separate, non-administrator user is a good idea, as with the dashboard.
+- optionally, the room the TV is in, so its lights show in the row
+
+The page sends them to the TV, which checks they work. Nothing is typed with the remote. **Full dashboard** expects the dashboard at `/local/dashboard/index.html`, where its README installs it.
 
 ## Set up Continue watching
 
@@ -105,6 +115,9 @@ To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstal
 | `.../data/NowPlayingStore.kt` | Stores those shows and turns them into Continue watching cards |
 | `.../data/ContinueWatchingRepository.kt` | Merges the two into one row and opens items |
 | `.../ui/JellyfinSetupScreen.kt` | The no-typing Jellyfin sign-in |
+| `.../data/HomeAssistant.kt` | Home Assistant sign-in, REST client, and what the Home row shows |
+| `.../home/PhoneSetupServer.kt` | The small web page on the TV that the QR code opens, for typing on your phone |
+| `.../ui/HaSetupScreen.kt`, `CameraScreen.kt`, `DashboardScreen.kt` | Connecting, a full-screen camera, and the dashboard inside TV Home |
 | `.../data/LauncherPrefs.kt` | The on/off toggle and the "open Google TV home once" flag |
 | `.../ui/HomeScreen.kt` | The rows, spotlight title, clock and background; later rows slot in here |
 | `.../ui/Cards.kt` | The Projectivy-style banner cards |
