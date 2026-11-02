@@ -59,6 +59,26 @@ To build it yourself: `./gradlew assembleDebug` with the Android SDK installed, 
 
 To update, do step 2 again. Every build is signed with the same key from `keystore/`, so it installs over the old one and keeps your settings.
 
+## Publish privately on Google Play
+
+An app from the Play Store isn't blocked the way sideloaded apps are, so the Home button and Continue watching switches work without ADB, and updates arrive by themselves. The internal testing track keeps it private to the Google accounts you list.
+
+GitHub builds the Play bundle, `tv-home.aab`, next to the APK on the **Latest build** release. This only works once the repository has two secrets, added under **Settings → Secrets and variables → Actions → New repository secret**:
+- `UPLOAD_KEYSTORE_BASE64`: the upload key, base64 encoded
+- `UPLOAD_KEYSTORE_PASSWORD`: its password
+
+Keep a copy of the upload key file somewhere safe. If it's lost, Play support can reset it.
+
+In the Play Console:
+1. **Create app.** Name: TV Home. App or game: App. Free.
+2. **Turn on Android TV.** Under **Test and release → Advanced settings → Form factors**, add **Android TV**.
+3. **Fill in App content.** For the privacy policy, use `https://github.com/fortopes77/home-assistant-tv-launcher/blob/main/PRIVACY.md`. Also fill in the content rating, target audience (18+), data safety (no data collected or shared), and ads (none). In the **Accessibility API** declaration, say the service only catches the Home button to open TV Home, the same as other launchers.
+4. **Make the internal testing release.** Under **Test and release → Testing → Internal testing**, create a release. Accept **Play App Signing**, upload `tv-home.aab`, and roll it out.
+5. **Add yourself as a tester.** On the **Testers** tab, add your Google account, then open the opt-in link on your phone and accept.
+6. **Install it on the TV.** First uninstall the sideloaded TV Home, because Play's copy is signed differently. Then install TV Home from the Play Store on the TV. You'll need to connect Home Assistant, Jellyfin and Seerr again.
+
+For an update, upload the newer `tv-home.aab` as a new internal testing release.
+
 ## ADB: unblock the Home button and Continue watching
 
 Android blocks two things for apps that didn't come from the Play Store: the accessibility switch (the Home button) and notification access (remembering what Disney+ and Binge play). If the switch turns itself off or the gear says it never started, a few ADB commands get around that. You need ADB on a computer on the same network as the TV ([Android platform tools](https://developer.android.com/tools/releases/platform-tools)).

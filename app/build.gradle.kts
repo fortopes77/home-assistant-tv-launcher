@@ -26,6 +26,24 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // The Play Store upload key. It lives in GitHub secrets, never in the repo: the workflow decodes it to
+        // a file and passes its path and password in, so only GitHub's builds can sign a Play bundle.
+        val uploadKey = System.getenv("UPLOAD_KEYSTORE_FILE")
+        if (uploadKey != null) {
+            create("upload") {
+                storeFile = file(uploadKey)
+                storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = "upload"
+                keyPassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("upload")
+        }
     }
 
     compileOptions {
