@@ -1,0 +1,44 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # GitHub's Ubuntu runners come with the Android SDK installed (ANDROID_HOME), so no setup step is needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk tv-home.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tv-home-apk
+          path: tv-home.apk
+
+      # Every build of main replaces tv-home.apk on the "latest" release, so there's one link to download.
+      - name: Publish to the latest release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          prerelease: true
+          files: tv-home.apk
+          body: Download tv-home.apk and install it with `adb install -r tv-home.apk`. See the README for the steps.

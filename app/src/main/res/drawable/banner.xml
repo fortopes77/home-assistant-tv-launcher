@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 16:9 banner shown in the Google TV app list. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="0" android:startColor="#8B5CF6" android:centerColor="#3B82F6" android:endColor="#06B6D4" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_home_glyph" android:gravity="center" android:width="96dp" android:height="96dp" />
+</layer-list>
