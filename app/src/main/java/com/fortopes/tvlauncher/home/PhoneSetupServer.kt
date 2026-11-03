@@ -95,7 +95,7 @@ class PhoneSetupServer(
     }
 
     private fun page(heading: String, content: String) = """<!doctype html><html><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>TV Home</title><style>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Fortopes Home</title><style>
 body{font:16px system-ui,sans-serif;background:#07070b;color:#f4f4f6;margin:0;padding:24px}
 h1{font-size:22px}label{display:block;margin:16px 0;color:#a1a1aa}
 input{display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:12px;font-size:16px;border-radius:8px;border:1px solid #3f3f46;background:#1a1b22;color:#fff}

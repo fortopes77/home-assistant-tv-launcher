@@ -417,7 +417,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Keeps the Home row fresh while TV Home is showing: lights, what's playing, the weather. */
+    /** Keeps the Home row fresh while Fortopes Home is showing: lights, what's playing, the weather. */
     private fun startHomePolling() {
         homePolling?.cancel()
         homePolling = lifecycleScope.launch {

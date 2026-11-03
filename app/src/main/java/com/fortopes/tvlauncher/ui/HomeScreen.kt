@@ -305,7 +305,7 @@ fun HomeScreen(
                                                         if (it.isFocused) {
                                                             spotlight = Spotlight(
                                                                 "Continue watching",
-                                                                "Sign in to Jellyfin and let TV Home see what other apps are playing",
+                                                                "Sign in to Jellyfin and let Fortopes Home see what other apps are playing",
                                                                 TvColors.Purple,
                                                             )
                                                         }
@@ -637,7 +637,7 @@ private fun TopBar(weather: String?, onOpenLauncherSettings: () -> Unit, gearFoc
             onClick = onOpenLauncherSettings,
             modifier = Modifier.size(36.dp).focusRequester(gearFocus),
         ) {
-            Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = "TV Home settings", modifier = Modifier.size(20.dp))
+            Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = "Fortopes Home settings", modifier = Modifier.size(20.dp))
         }
     }
 }

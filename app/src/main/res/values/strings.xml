@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">TV Home</string>
-    <string name="accessibility_label">TV Home: Home button</string>
-    <string name="accessibility_description">Opens TV Home when you press Home on the remote, or when an app closes back to the Google TV home screen. Turn it off in TV Home\'s settings to get the Google TV home back. It does not read anything on the screen.</string>
-    <string name="now_playing_label">TV Home: remember what\'s playing</string>
+    <string name="app_name">Fortopes Home</string>
+    <string name="accessibility_label">Fortopes Home: Home button</string>
+    <string name="accessibility_description">Opens Fortopes Home when you press Home on the remote, or when an app closes back to the Google TV home screen. Turn it off in Fortopes Home\'s settings to get the Google TV home back. It does not read anything on the screen.</string>
+    <string name="now_playing_label">Fortopes Home: remember what\'s playing</string>
 </resources>

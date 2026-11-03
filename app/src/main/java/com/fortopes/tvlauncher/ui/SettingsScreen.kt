@@ -83,7 +83,7 @@ fun SettingsScreen(
             selected = false,
             onClick = { onToggleOverride(!overrideEnabled) },
             modifier = rowModifier,
-            headlineContent = { Text("Open TV Home with the Home button") },
+            headlineContent = { Text("Open Fortopes Home with the Home button") },
             supportingContent = {
                 Text(
                     if (overrideEnabled) "On: Home and Back out of apps come here."
@@ -101,7 +101,7 @@ fun SettingsScreen(
             supportingContent = {
                 Text(
                     if (serviceEnabled) "Turned on. The toggle above works. Last started ${formatTime(serviceStartedAt)}."
-                    else "Turned off. Open Accessibility and turn on \"TV Home: Home button\"." +
+                    else "Turned off. Open Accessibility and turn on \"Fortopes Home: Home button\"." +
                         if (serviceStartedAt > 0) " It last ran ${formatTime(serviceStartedAt)}." else "",
                 )
             },
@@ -118,7 +118,7 @@ fun SettingsScreen(
                     Text(
                         if (serviceStartedAt > 0) {
                             "It started, then stopped. If there's an error below, tell Claude what it says. " +
-                                "Press OK here to open TV Home's app info."
+                                "Press OK here to open Fortopes Home's app info."
                         } else {
                             "It has never started, so Android is blocking it. Android does this for apps that didn't " +
                                 "come from the Play Store. Press OK here, and if the page has \"Allow restricted " +
@@ -166,8 +166,8 @@ fun SettingsScreen(
             headlineContent = { Text("Disney+, Binge and other apps") },
             supportingContent = {
                 Text(
-                    if (nowPlayingAccess) "On. TV Home remembers the last show each app played, and OK opens that app."
-                    else "Off. TV Home needs notification access to see what's playing. Android blocks it for sideloaded " +
+                    if (nowPlayingAccess) "On. Fortopes Home remembers the last show each app played, and OK opens that app."
+                    else "Off. Fortopes Home needs notification access to see what's playing. Android blocks it for sideloaded " +
                         "apps, so turn it on with the ADB command in the README.",
                 )
             },
@@ -233,7 +233,7 @@ fun SettingsScreen(
                 onClick = { onUnhideApp(key) },
                 modifier = rowModifier,
                 headlineContent = { Text(label) },
-                supportingContent = { Text("Hidden from TV Home. Press OK to show it again.") },
+                supportingContent = { Text("Hidden from Fortopes Home. Press OK to show it again.") },
             )
         }
 

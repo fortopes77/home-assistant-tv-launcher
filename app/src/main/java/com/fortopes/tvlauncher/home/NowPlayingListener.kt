@@ -102,7 +102,7 @@ class NowPlayingListener : NotificationListenerService() {
         )
     }
 
-    // An error here must never crash TV Home.
+    // An error here must never crash Fortopes Home.
     private fun safely(block: () -> Unit) {
         try {
             block()

@@ -65,7 +65,7 @@ fun HaSetupScreen(store: HaStore, client: HaClient, onDone: () -> Unit) {
 
     DisposableEffect(Unit) {
         val server = PhoneSetupServer(
-            title = "Connect TV Home to Home Assistant",
+            title = "Connect Fortopes Home to Home Assistant",
             fields = listOf(
                 PhoneSetupServer.Field("url", "Home Assistant address", "http://homeassistant.local:8123"),
                 PhoneSetupServer.Field(
@@ -79,7 +79,7 @@ fun HaSetupScreen(store: HaStore, client: HaClient, onDone: () -> Unit) {
         ) { values ->
             save(store, client, values["url"].orEmpty(), values["token"].orEmpty(), values["room"].orEmpty())
                 .onSuccess { done = it }
-                .map { "TV Home is connected to $it." }
+                .map { "Fortopes Home is connected to $it." }
         }
         address = server.start(context)
         onDispose { server.stop() }

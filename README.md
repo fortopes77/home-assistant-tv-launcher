@@ -1,16 +1,16 @@
-# TV Home
+# Fortopes Home
 
 A home screen for Google TV, styled like Projectivy's app rows, that sits on top of the stock Google TV home instead of replacing it.
 
-- **Apps:** every app that shows in Google TV's app list, as wide banner cards. The card you're on grows and gets a white ring, its name shows big at the top, and the purple-blue background takes on its colours. The row shows straight away on a fresh start, from the last visit, while TV Home checks what's installed.
+- **Apps:** every app that shows in Google TV's app list, as wide banner cards. The card you're on grows and gets a white ring, its name shows big at the top, and the purple-blue background takes on its colours. The row shows straight away on a fresh start, from the last visit, while Fortopes Home checks what's installed.
 - **Your order:** hold OK on an app for a small menu: **Move** (left and right, then OK), **Hide**, or **App info**. Hidden apps come back from the gear. New apps join the end of the row.
 - **Inputs:** the TV's HDMI inputs (only on a TV; a Chromecast or streaming box has none).
 - **Settings:** the gear at the top right opens a flyout from the right, like Google TV's, with **TV settings** first. **Light mode for slow TVs** turns off the colour glow and fades.
-- **Home button:** like Projectivy, an accessibility service opens TV Home when you press Home, or when you press Back out of an app and would land on the Google TV home. Turn it off in TV Home's settings (the gear, top right) and Home goes back to the stock Google TV screen. Nothing is replaced, so uninstalling TV Home leaves the TV exactly as it was.
+- **Home button:** like Projectivy, an accessibility service opens Fortopes Home when you press Home, or when you press Back out of an app and would land on the Google TV home. Turn it off in Fortopes Home's settings (the gear, top right) and Home goes back to the stock Google TV screen. Nothing is replaced, so uninstalling Fortopes Home leaves the TV exactly as it was.
 
-- **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. For Disney+, Binge and other apps, TV Home remembers the last show each one played (from Android's "now playing" info) and shows its name and picture. OK opens that app. These apps don't share their own continue-watching lists with other apps, so TV Home can't jump straight to the episode.
+- **Continue watching:** what you're part-way through, newest first, above the apps. Jellyfin comes straight from your server, and OK opens Jellyfin and starts it where you left off. For Disney+, Binge and other apps, Fortopes Home remembers the last show each one played (from Android's "now playing" info) and shows its name and picture. OK opens that app. These apps don't share their own continue-watching lists with other apps, so Fortopes Home can't jump straight to the episode.
 
-- **Home:** a row for Home Assistant. It has your front door camera (OK for full screen, left and right for the others), what's playing, the lights in the TV's room, your scenes and scripts (such as Movie mode and Good night), and **Full dashboard**, which opens the dashboard's TV screen (`?tv`) inside TV Home for cameras, calendar, solar and rooms. The weather sits next to the clock.
+- **Home:** a row for Home Assistant. It has your front door camera (OK for full screen, left and right for the others), what's playing, the lights in the TV's room, your scenes and scripts (such as Movie mode and Good night), and **Full dashboard**, which opens the dashboard's TV screen (`?tv`) inside Fortopes Home for cameras, calendar, solar and rooms. The weather sits next to the clock.
 
 ## Recommended (Seerr)
 
@@ -33,10 +33,10 @@ The TV checks they work before saving. **Full dashboard** expects the dashboard 
 
 ## Set up Continue watching
 
-Open TV Home's settings (the gear, top right). Nothing needs typing:
+Open Fortopes Home's settings (the gear, top right). Nothing needs typing:
 
-- **Jellyfin:** press OK on Jellyfin. TV Home finds your server on the network and shows a code. On your phone, open the Jellyfin app → Settings → **Quick Connect** and enter it. (If the TV says Quick Connect is off, turn it on in Jellyfin's Dashboard → General.) If the server isn't found, type its address in the box, like `192.168.1.20`.
-- **Disney+, Binge and other apps:** TV Home needs notification access to see what's playing (it doesn't read or change your notifications). Android blocks that for sideloaded apps, so turn it on with ADB (see below):
+- **Jellyfin:** press OK on Jellyfin. Fortopes Home finds your server on the network and shows a code. On your phone, open the Jellyfin app → Settings → **Quick Connect** and enter it. (If the TV says Quick Connect is off, turn it on in Jellyfin's Dashboard → General.) If the server isn't found, type its address in the box, like `192.168.1.20`.
+- **Disney+, Binge and other apps:** Fortopes Home needs notification access to see what's playing (it doesn't read or change your notifications). Android blocks that for sideloaded apps, so turn it on with ADB (see below):
 
   ```sh
   adb shell cmd notification allow_listener com.fortopes.home/com.fortopes.tvlauncher.home.NowPlayingListener
@@ -52,13 +52,13 @@ To build it yourself: `./gradlew assembleDebug` with the Android SDK installed, 
 
 ## Install it on the TV (no computer needed)
 
-The app's ID is `com.fortopes.home`. Builds before November 2026 used `com.fortopes.tvlauncher`, so if you have one of those, uninstall it first. Otherwise you'll end up with two copies of TV Home.
+The app's ID is `com.fortopes.home`. Builds before November 2026 used `com.fortopes.tvlauncher`, so if you have one of those, uninstall it first. Otherwise you'll end up with two copies of Fortopes Home.
 
 
 1. Install **Downloader** (by AFTVnews) from the Play Store on the TV.
 2. In Downloader, type the APK's address: `https://github.com/fortopes77/home-assistant-tv-launcher/releases/download/latest/tv-home.apk`. The first time, the TV asks you to let Downloader install apps. Allow it, then install.
-3. Turn on the Home button service: Settings → System → Accessibility → **TV Home: Home button** → On. It's the same place you'd switch on Projectivy's.
-4. **Press Home.** TV Home opens. The gear at the top right has the on/off toggle, shows whether the service is on, and has **Open the Google TV home** to visit the stock home once without turning anything off.
+3. Turn on the Home button service: Settings → System → Accessibility → **Fortopes Home: Home button** → On. It's the same place you'd switch on Projectivy's.
+4. **Press Home.** Fortopes Home opens. The gear at the top right has the on/off toggle, shows whether the service is on, and has **Open the Google TV home** to visit the stock home once without turning anything off.
 
 To update, do step 2 again. Every build is signed with the same key from `keystore/`, so it installs over the old one and keeps your settings.
 
@@ -73,12 +73,12 @@ GitHub builds the Play bundle, `tv-home.aab`, next to the APK on the **Latest bu
 Keep a copy of the upload key file somewhere safe. If it's lost, Play support can reset it.
 
 In the Play Console:
-1. **Create app.** Name: TV Home. App or game: App. Free.
+1. **Create app.** Name: Fortopes Home. App or game: App. Free.
 2. **Turn on Android TV.** Under **Test and release → Advanced settings → Form factors**, add **Android TV**.
-3. **Fill in App content.** For the privacy policy, use `https://github.com/fortopes77/home-assistant-tv-launcher/blob/main/PRIVACY.md`. Also fill in the content rating, target audience (18+), data safety (no data collected or shared), and ads (none). In the **Accessibility API** declaration, say the service only catches the Home button to open TV Home, the same as other launchers.
+3. **Fill in App content.** For the privacy policy, use `https://github.com/fortopes77/home-assistant-tv-launcher/blob/main/PRIVACY.md`. Also fill in the content rating, target audience (18+), data safety (no data collected or shared), and ads (none). In the **Accessibility API** declaration, say the service only catches the Home button to open Fortopes Home, the same as other launchers.
 4. **Make the internal testing release.** Under **Test and release → Testing → Internal testing**, create a release. Accept **Play App Signing**, upload `tv-home.aab`, and roll it out.
 5. **Add yourself as a tester.** On the **Testers** tab, add your Google account, then open the opt-in link on your phone and accept.
-6. **Install it on the TV.** First uninstall the sideloaded TV Home, because Play's copy is signed differently. Then install TV Home from the Play Store on the TV. You'll need to connect Home Assistant, Jellyfin and Seerr again.
+6. **Install it on the TV.** First uninstall the sideloaded Fortopes Home, because Play's copy is signed differently. Then install Fortopes Home from the Play Store on the TV. You'll need to connect Home Assistant, Jellyfin and Seerr again.
 
 For an update, upload the newer `tv-home.aab` as a new internal testing release.
 
@@ -98,7 +98,7 @@ Android blocks two things for apps that didn't come from the Play Store: the acc
    adb shell appops set com.fortopes.home ACCESS_RESTRICTED_SETTINGS allow
    ```
 
-   Then turn on Settings → System → Accessibility → **TV Home: Home button** on the TV.
+   Then turn on Settings → System → Accessibility → **Fortopes Home: Home button** on the TV.
 
    Or turn the service on straight from ADB. First see what's already on:
 
@@ -126,13 +126,13 @@ Android blocks two things for apps that didn't come from the Play Store: the acc
    adb shell cmd notification allow_listener com.fortopes.home/com.fortopes.tvlauncher.home.NowPlayingListener
    ```
 
-To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstall com.fortopes.home`.
+To remove Fortopes Home: Settings → Apps → Fortopes Home → Uninstall, or `adb uninstall com.fortopes.home`.
 
 ## Good to know
 
 - The service asks for window changes and key presses only. It can't read what's on the screen.
 - While the toggle is on, a **long** press of Home is caught too, so Google TV's long-press panel doesn't open. Use the gear or the TV settings card for settings.
-- If Home stops opening TV Home after a TV update, check the service is still on (the gear shows it) and switch it on again.
+- If Home stops opening Fortopes Home after a TV update, check the service is still on (the gear shows it) and switch it on again.
 - If Projectivy's Home button override is also on, turn one of them off so they don't fight over the Home button.
 
 ## Code map
@@ -151,8 +151,8 @@ To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstal
 | `.../ui/JellyfinSetupScreen.kt` | The no-typing Jellyfin sign-in |
 | `.../data/HomeAssistant.kt` | Home Assistant sign-in, REST client, and what the Home row shows |
 | `.../home/PhoneSetupServer.kt` | The small web page on the TV that the QR code opens, for typing on your phone |
-| `.../ui/HaSetupScreen.kt`, `CameraScreen.kt`, `DashboardScreen.kt` | Connecting, a full-screen camera, and the dashboard inside TV Home |
+| `.../ui/HaSetupScreen.kt`, `CameraScreen.kt`, `DashboardScreen.kt` | Connecting, a full-screen camera, and the dashboard inside Fortopes Home |
 | `.../data/LauncherPrefs.kt` | The on/off toggle and the "open Google TV home once" flag |
 | `.../ui/HomeScreen.kt` | The rows, spotlight title, clock and background; later rows slot in here |
 | `.../ui/Cards.kt` | The Projectivy-style banner cards |
-| `.../ui/SettingsScreen.kt` | TV Home's settings |
+| `.../ui/SettingsScreen.kt` | Fortopes Home's settings |

@@ -47,8 +47,8 @@ class WatchNextRepository(context: Context) {
     }
 
     /**
-     * What TV Home can see in the list, for the settings screen: "3 items: YouTube (2), Disney+ (1)".
-     * Nothing at all from any app means Android only shows TV Home its own entries.
+     * What Fortopes Home can see in the list, for the settings screen: "3 items: YouTube (2), Disney+ (1)".
+     * Nothing at all from any app means Android only shows Fortopes Home its own entries.
      */
     fun summary(): String {
         if (!hasPermission) return "not allowed"
@@ -69,12 +69,12 @@ class WatchNextRepository(context: Context) {
                 counts[pkg] = (counts[pkg] ?: 0) + 1
             }
         }
-        if (counts.isEmpty()) return "TV Home can see 0 items from any app"
+        if (counts.isEmpty()) return "Fortopes Home can see 0 items from any app"
         val parts = counts.entries.joinToString(", ") { (pkg, n) ->
             val label = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
             "$label ($n)"
         }
-        return "TV Home can see ${counts.values.sum()} items: $parts"
+        return "Fortopes Home can see ${counts.values.sum()} items: $parts"
     }
 
     private fun Cursor.toItem(label: (String) -> String): ContinueItem? {
