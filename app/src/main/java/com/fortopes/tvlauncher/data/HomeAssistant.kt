@@ -23,6 +23,16 @@ class HaStore(context: Context) {
 
     val isSignedIn: Boolean get() = !url.isNullOrBlank() && !token.isNullOrBlank()
 
+    /** The doorbell (or person sensor) that brings up the camera pop-up. Null means the pop-up is off. */
+    var doorbellSensor: String?
+        get() = prefs.getString("doorbell_sensor", null)
+        set(value) = prefs.edit().putString("doorbell_sensor", value).apply()
+
+    /** The camera the pop-up shows. Null picks the one that goes with the sensor. */
+    var doorbellCamera: String?
+        get() = prefs.getString("doorbell_camera", null)
+        set(value) = prefs.edit().putString("doorbell_camera", value).apply()
+
     fun signOut() = prefs.edit().remove("token").apply()
 }
 

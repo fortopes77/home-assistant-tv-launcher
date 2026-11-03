@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.fortopes.tvlauncher.data.HaClient
 import com.fortopes.tvlauncher.data.HaEntity
 import com.fortopes.tvlauncher.data.HaLive
+import com.fortopes.tvlauncher.data.HomeRows
+import com.fortopes.tvlauncher.home.DoorbellPopup
 import com.fortopes.tvlauncher.data.HttpException
 import com.fortopes.tvlauncher.data.HaStore
 import com.fortopes.tvlauncher.data.HomeRepository
@@ -141,6 +143,16 @@ class MainActivity : ComponentActivity() {
     /** Every app, before your order and hidden apps are applied; [apps] is what the row shows. */
     private var allApps: List<TvApp> = emptyList()
     private var hiddenApps by mutableStateOf<List<Pair<String, String>>>(emptyList())
+    private var favourites by mutableStateOf<List<TvApp>>(emptyList())
+    private var rowOrder by mutableStateOf(HomeRows.ordered(emptyList()))
+    private var hiddenRows by mutableStateOf<Set<String>>(emptySet())
+    /** Doorbell settings: the sensors and cameras to pick from, read from Home Assistant when settings open. */
+    private var doorbellSensors by mutableStateOf<List<HaEntity>>(emptyList())
+    private var doorbellCameras by mutableStateOf<List<HaEntity>>(emptyList())
+    private var doorbellSensor by mutableStateOf<String?>(null)
+    private var doorbellCamera by mutableStateOf<String?>(null)
+    /** A camera to open full screen once the Home row has loaded (OK on the doorbell pop-up). */
+    private var pendingCamera: String? = null
     private var lightMode by mutableStateOf(false)
     private enum class Screen { Home, Settings, JellyfinSetup, HaSetup, SeerrSetup, Camera, Dashboard }
 
@@ -183,6 +195,7 @@ class MainActivity : ComponentActivity() {
         haLive = HaLive(haStore)
         seerrStore = SeerrStore(this)
         seerr = SeerrClient(seerrStore)
+        openCameraFrom(intent)
 
         setContent {
             TvHomeTheme {
@@ -193,6 +206,7 @@ class MainActivity : ComponentActivity() {
                             screen = haSetupReturn
                             refreshStatus()
                             startHomePolling()
+                            restartDoorbell()
                         })
                     }
                     Screen.SeerrSetup -> {
@@ -228,6 +242,9 @@ class MainActivity : ComponentActivity() {
                             continueItems = continueItems,
                             continueNeedsSetup = jellyfinStatus == null || !nowPlayingAccess,
                             apps = apps,
+                            favourites = favourites,
+                            rowOrder = rowOrder,
+                            hiddenRows = hiddenRows,
                             recommended = recommended,
                             seerrNeedsSetup = seerrStatus == null,
                             canPlayJellyfin = jellyfinStore.isSignedIn,
@@ -241,6 +258,16 @@ class MainActivity : ComponentActivity() {
                             settingsOpen = screen == Screen.Settings,
                             resetSignal = resetSignal,
                             onMoveApp = ::moveApp,
+                            onMoveFavourite = { app, by ->
+                                appRepo.moveFavourite(app, by)
+                                applyArrangement()
+                            },
+                            onToggleFavourite = {
+                                val adding = it.key !in appRepo.favourites
+                                appRepo.toggleFavourite(it)
+                                applyArrangement()
+                                toast(if (adding) "${it.label} added to favourites" else "${it.label} removed from favourites")
+                            },
                             onHideApp = {
                                 appRepo.hide(it)
                                 applyArrangement()
@@ -268,7 +295,10 @@ class MainActivity : ComponentActivity() {
                                     ?: packageManager.getLaunchIntentForPackage(JellyfinClient.JELLYFIN_PACKAGE)
                                 if (launch == null) toast("Jellyfin isn't installed") else open(launch)
                             },
-                            onOpenLauncherSettings = { screen = Screen.Settings },
+                            onOpenLauncherSettings = {
+                                screen = Screen.Settings
+                                loadDoorbellChoices()
+                            },
                             onHaRun = ::runHa,
                             onOpenCamera = {
                                 cameraStart = it
@@ -338,6 +368,39 @@ class MainActivity : ComponentActivity() {
                                 appRepo.unhide(it)
                                 applyArrangement()
                             },
+                            rowOrder = rowOrder,
+                            hiddenRows = hiddenRows,
+                            onToggleRow = { key ->
+                                prefs.hiddenRows = if (key in prefs.hiddenRows) prefs.hiddenRows - key else prefs.hiddenRows + key
+                                hiddenRows = prefs.hiddenRows
+                            },
+                            onMoveRowUp = { key ->
+                                val list = rowOrder.toMutableList()
+                                val i = list.indexOf(key)
+                                if (i > 0) {
+                                    list.add(i - 1, list.removeAt(i))
+                                    prefs.rowOrder = list
+                                    rowOrder = prefs.rowOrder
+                                }
+                            },
+                            doorbellSensors = doorbellSensors,
+                            doorbellCameras = doorbellCameras,
+                            doorbellSensor = doorbellSensor,
+                            doorbellCamera = doorbellCamera,
+                            onPickDoorbellSensor = { id ->
+                                haStore.doorbellSensor = id
+                                doorbellSensor = id
+                                restartDoorbell()
+                            },
+                            onPickDoorbellCamera = { id ->
+                                haStore.doorbellCamera = id
+                                doorbellCamera = id
+                            },
+                            onTestDoorbell = {
+                                val popup = DoorbellPopup.current
+                                if (popup == null) toast("Turn on the Home button service first (it shows the pop-up)")
+                                else popup.show()
+                            },
                             version = BuildConfigVersion.name(this@MainActivity),
                             onToggleOverride = {
                                 prefs.overrideEnabled = it
@@ -365,6 +428,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onSignOutHa = {
                                 haStore.signOut()
+                                restartDoorbell()
                                 homePolling?.cancel()
                                 home = null
                                 refreshStatus()
@@ -392,6 +456,8 @@ class MainActivity : ComponentActivity() {
         prefs.bypassStockHome = false
         overrideEnabled = prefs.overrideEnabled
         lightMode = prefs.lightMode
+        rowOrder = prefs.rowOrder
+        hiddenRows = prefs.hiddenRows
         serviceEnabled = prefs.isServiceEnabled()
         refreshStatus()
         reload() // picks up apps installed or removed while we were away
@@ -417,6 +483,38 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(EXTRA_FROM_HOME_BUTTON, false) || intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
             screen = Screen.Home
             resetSignal++
+        }
+        openCameraFrom(intent)
+    }
+
+    /** OK on the doorbell pop-up opens Fortopes Home with that camera full screen. */
+    private fun openCameraFrom(intent: Intent?) {
+        pendingCamera = intent?.getStringExtra(EXTRA_CAMERA) ?: return
+        intent.removeExtra(EXTRA_CAMERA)
+        showPendingCamera()
+    }
+
+    private fun showPendingCamera() {
+        val id = pendingCamera ?: return
+        val cameras = home?.cameras ?: return // the Home row hasn't loaded yet; it calls this when it has
+        pendingCamera = null
+        cameraStart = cameras.indexOfFirst { it.id == id }.coerceAtLeast(0)
+        if (cameras.isNotEmpty()) screen = Screen.Camera
+    }
+
+    private fun restartDoorbell() {
+        DoorbellPopup.current?.let { if (haStore.doorbellSensor != null && haStore.isSignedIn) it.start() else it.stop() }
+    }
+
+    /** Reads the doorbell and camera choices from Home Assistant for the settings. */
+    private fun loadDoorbellChoices() {
+        doorbellSensor = haStore.doorbellSensor
+        doorbellCamera = haStore.doorbellCamera
+        if (!haStore.isSignedIn) return
+        lifecycleScope.launch {
+            val states = withContext(Dispatchers.IO) { runCatching { ha.states() }.getOrNull() } ?: return@launch
+            doorbellSensors = DoorbellPopup.candidates(states)
+            doorbellCameras = states.filter { it.domain == "camera" && !it.unavailable }.sortedBy { it.name.lowercase() }
         }
     }
 
@@ -459,6 +557,8 @@ class MainActivity : ComponentActivity() {
     /** Applies your order and hidden apps to [allApps]. */
     private fun applyArrangement() {
         apps = appRepo.arrange(allApps)
+        val byKey = allApps.associateBy { it.key }
+        favourites = appRepo.favourites.mapNotNull { byKey[it] }
         val hide = appRepo.hidden
         hiddenApps = allApps.filter { it.key in hide }.map { it.key to it.label }
     }
@@ -547,6 +647,7 @@ class MainActivity : ComponentActivity() {
                     haLive.updates().collect { states ->
                         haLiveUp = true
                         home = withContext(Dispatchers.IO) { homeRepo.build(states) }
+                        showPendingCamera()
                         // Several changes at once (a scene turning on many lights) become one redraw.
                         delay(300)
                     }
@@ -565,6 +666,7 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun reloadHomeNow() {
         home = withContext(Dispatchers.IO) { runCatching { homeRepo.load() }.getOrNull() }
+        showPendingCamera()
     }
 
     private fun runHa(entity: HaEntity) {
@@ -650,6 +752,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_FROM_HOME_BUTTON = "from_home_button"
+        const val EXTRA_CAMERA = "camera"
         private const val INPUTS_EVERY_MS = 5 * 60_000L
         private const val CHANNELS_EVERY_MS = 10 * 60_000L
         private const val CAMERA_THUMB_WIDTH = 480

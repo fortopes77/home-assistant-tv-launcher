@@ -25,6 +25,7 @@ class HomeButtonService : AccessibilityService() {
     private lateinit var prefs: LauncherPrefs
     private var stockHomePackages: Set<String> = emptySet()
     private var lastOpenedAt = 0L
+    private var doorbell: DoorbellPopup? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -33,6 +34,17 @@ class HomeButtonService : AccessibilityService() {
         stockHomePackages = runCatching { findStockHomePackages(this) }
             .onFailure { prefs.recordError("Home button service start", it) }
             .getOrDefault(KNOWN_STOCK_HOMES)
+        // The doorbell pop-up runs here because this service is always on, even while other apps play.
+        doorbell = runCatching { DoorbellPopup(this) { where, e -> prefs.recordError(where, e) }.also { it.start() } }
+            .onFailure { prefs.recordError("Doorbell pop-up start", it) }
+            .getOrNull()
+        DoorbellPopup.current = doorbell
+    }
+
+    override fun onDestroy() {
+        doorbell?.stop()
+        if (DoorbellPopup.current === doorbell) DoorbellPopup.current = null
+        super.onDestroy()
     }
 
     // Never let an error escape: Android switches off an accessibility service that crashes.
@@ -52,6 +64,23 @@ class HomeButtonService : AccessibilityService() {
     }
 
     private fun handleKey(event: KeyEvent): Boolean {
+        // While the doorbell pop-up shows: Back closes it, OK opens that camera full screen.
+        val camera = doorbell?.cameraShowing
+        if (camera != null) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BACK -> {
+                    if (event.action == KeyEvent.ACTION_UP) doorbell?.dismiss()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    if (event.action == KeyEvent.ACTION_UP) {
+                        doorbell?.dismiss()
+                        openLauncher(camera)
+                    }
+                    return true
+                }
+            }
+        }
         if (event.keyCode != KeyEvent.KEYCODE_HOME || !active() || prefs.bypassStockHome) return false
         // Swallow both the press and the release so the stock home never sees it; open on release.
         if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) openLauncher()
@@ -77,9 +106,9 @@ class HomeButtonService : AccessibilityService() {
 
     private fun active(): Boolean = ::prefs.isInitialized && prefs.overrideEnabled
 
-    private fun openLauncher() {
+    private fun openLauncher(camera: String? = null) {
         val now = SystemClock.uptimeMillis()
-        if (now - lastOpenedAt < 600) return // the key press and the window change often arrive together
+        if (camera == null && now - lastOpenedAt < 600) return // the key press and the window change often arrive together
         lastOpenedAt = now
         val intent = Intent(this, MainActivity::class.java)
             .addFlags(
@@ -88,7 +117,8 @@ class HomeButtonService : AccessibilityService() {
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
                     Intent.FLAG_ACTIVITY_NO_ANIMATION,
             )
-            .putExtra(MainActivity.EXTRA_FROM_HOME_BUTTON, true)
+            .putExtra(MainActivity.EXTRA_FROM_HOME_BUTTON, camera == null)
+        if (camera != null) intent.putExtra(MainActivity.EXTRA_CAMERA, camera)
         runCatching { startActivity(intent) }
     }
 

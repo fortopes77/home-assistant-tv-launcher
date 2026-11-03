@@ -28,6 +28,16 @@ class LauncherPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_LIGHT_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_LIGHT_MODE, value).apply()
 
+    /** The home screen's rows in your order (row keys, see [HomeRows]). Rows added later go where they belong. */
+    var rowOrder: List<String>
+        get() = HomeRows.ordered(prefs.getString("row_order", "").orEmpty().split('\n').filter { it.isNotBlank() })
+        set(value) = prefs.edit().putString("row_order", value.joinToString("\n")).apply()
+
+    /** Rows you've hidden from the home screen. */
+    var hiddenRows: Set<String>
+        get() = prefs.getStringSet("hidden_rows", emptySet()).orEmpty().toSet()
+        set(value) = prefs.edit().putStringSet("hidden_rows", value).apply()
+
     /** When the Home button service last started, or 0 if it never has. */
     var serviceStartedAt: Long
         get() = prefs.getLong(KEY_SERVICE_STARTED, 0L)
@@ -61,5 +71,32 @@ class LauncherPrefs(context: Context) {
         private const val KEY_LAST_ERROR = "last_error"
         private const val KEY_BYPASS = "bypass_stock_home"
         private const val KEY_LIGHT_MODE = "light_mode"
+    }
+}
+
+/** The home screen's rows: their keys and names, in the order they start in. */
+object HomeRows {
+    val ALL = listOf(
+        "favourites" to "Favourites",
+        "continue" to "Continue watching",
+        "apps" to "Apps",
+        "livetv" to "Live TV",
+        "recommended" to "Recommended",
+        "home" to "Home",
+        "inputs" to "Inputs",
+    )
+
+    fun title(key: String) = ALL.firstOrNull { it.first == key }?.second ?: key
+
+    /** [saved] order, with any row it doesn't mention put back after the row it normally follows. */
+    fun ordered(saved: List<String>): List<String> {
+        val known = ALL.map { it.first }
+        val out = saved.filter { it in known }.distinct().toMutableList()
+        known.forEachIndexed { i, key ->
+            if (key in out) return@forEachIndexed
+            val after = known.take(i).lastOrNull { it in out }
+            out.add(if (after == null) 0 else out.indexOf(after) + 1, key)
+        }
+        return out
     }
 }
