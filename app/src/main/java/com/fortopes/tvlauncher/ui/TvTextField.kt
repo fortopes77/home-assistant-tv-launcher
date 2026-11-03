@@ -16,6 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +49,7 @@ fun TvTextField(
     imeAction: ImeAction = ImeAction.Go,
 ) {
     val interaction = remember { MutableInteractionSource() }
+    val focusManager = LocalFocusManager.current
     val focused by interaction.collectIsFocusedAsState()
     Column(modifier.fillMaxWidth()) {
         Text(label, color = TvColors.Muted, fontSize = 13.sp)
@@ -57,8 +65,24 @@ fun TvTextField(
                 keyboardType = if (secret) KeyboardType.Password else KeyboardType.Uri,
                 imeAction = imeAction,
             ),
-            keyboardActions = KeyboardActions(onGo = { onSubmit() }, onDone = { onSubmit() }, onNext = { onSubmit() }),
+            // Next goes to the next box; Go or Done on the last box connects.
+            keyboardActions = KeyboardActions(
+                onGo = { onSubmit() },
+                onDone = { onSubmit() },
+                onNext = { focusManager.moveFocus(FocusDirection.Down) },
+            ),
             modifier = Modifier
+                // A text box keeps up and down for itself, which traps the remote in the first box. Send them on
+                // to the box above or below instead; left and right still move the cursor.
+                .onPreviewKeyEvent { e ->
+                    val dir = when (e.key) {
+                        Key.DirectionDown -> FocusDirection.Down
+                        Key.DirectionUp -> FocusDirection.Up
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    if (e.type == KeyEventType.KeyDown) focusManager.moveFocus(dir)
+                    true
+                }
                 .padding(top = 6.dp)
                 .fillMaxWidth()
                 .background(TvColors.Card, RoundedCornerShape(8.dp))
