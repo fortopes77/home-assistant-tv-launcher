@@ -1,14 +1,16 @@
 [versions]
 agp = "8.11.1"
-kotlin = "2.0.21"
-coreKtx = "1.15.0"
-activityCompose = "1.9.3"
-composeBom = "2024.12.01"
-tvMaterial = "1.0.0"
-lifecycle = "2.8.7"
+kotlin = "2.1.21"
+coreKtx = "1.16.0"
+activityCompose = "1.10.1"
+composeBom = "2025.06.01"
+tvMaterial = "1.0.1"
+lifecycle = "2.9.1"
 palette = "1.0.0"
 coil = "2.7.0"
 zxing = "3.5.3"
+profileinstaller = "1.4.1"
+okhttp = "4.12.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -17,6 +19,8 @@ androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecyc
 androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }

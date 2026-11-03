@@ -43,7 +43,10 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            // R8 shrinks and optimises the code. Compose runs much faster this way, which matters on slow TVs.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("upload")
         }
     }
@@ -71,4 +74,8 @@ dependencies {
     implementation(libs.tv.material)
     implementation(libs.coil.compose)
     implementation(libs.zxing.core)
+    // Installs the startup profile (src/main/baseline-prof.txt plus the libraries' own), so the app starts
+    // compiled instead of interpreted, even right after an update.
+    implementation(libs.androidx.profileinstaller)
+    implementation(libs.okhttp)
 }
