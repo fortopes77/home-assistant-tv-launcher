@@ -81,6 +81,7 @@ import java.util.Date
  * The last card in a row: right does nothing, instead of jumping to whatever is nearest
  * (such as the settings button above).
  */
+@OptIn(ExperimentalComposeUiApi::class)
 private fun Modifier.rowEnd(last: Boolean): Modifier =
     if (last) focusProperties { right = FocusRequester.Cancel } else this
 
