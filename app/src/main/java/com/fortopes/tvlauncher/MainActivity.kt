@@ -76,7 +76,27 @@ class MainActivity : ComponentActivity() {
             if (now - event.eventTime > STALE_REPEAT_MS || now - lastRepeatAt < REPEAT_GAP_MS) return true
             lastRepeatAt = now
         }
-        return super.dispatchKeyEvent(event)
+        val handled = super.dispatchKeyEvent(event)
+        if (handled && event.action == android.view.KeyEvent.ACTION_DOWN) playKeySound(event)
+        return handled
+    }
+
+    /**
+     * The TV's own little click as you move around and press OK, like the stock home screen. Android
+     * plays it only when System sounds is on in the TV's settings, so turning that off silences it.
+     * Only for keys that did something, so the end of a row stays quiet.
+     */
+    private fun playKeySound(event: android.view.KeyEvent) {
+        val effect = when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> android.view.SoundEffectConstants.NAVIGATION_LEFT
+            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> android.view.SoundEffectConstants.NAVIGATION_RIGHT
+            android.view.KeyEvent.KEYCODE_DPAD_UP -> android.view.SoundEffectConstants.NAVIGATION_UP
+            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> android.view.SoundEffectConstants.NAVIGATION_DOWN
+            android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ->
+                if (event.repeatCount == 0) android.view.SoundEffectConstants.CLICK else return
+            else -> return
+        }
+        window.decorView.playSoundEffect(effect)
     }
 
     private fun isArrow(code: Int) = code == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
