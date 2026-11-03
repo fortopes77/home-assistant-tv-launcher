@@ -274,6 +274,42 @@ fun ContinueCard(item: ContinueItem, onClick: () -> Unit, modifier: Modifier = M
     }
 }
 
+/** A Jellyfin Live TV channel: its logo, number and name, and what's on now. */
+@Composable
+fun ChannelCard(channel: com.fortopes.tvlauncher.data.LiveChannel, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    BannerCard(onClick = onClick, modifier = modifier) {
+        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF262838), Color(0xFF15161D)))))
+        if (channel.logoUrl != null) {
+            AsyncImage(
+                model = channel.logoUrl,
+                contentDescription = channel.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 34.dp),
+            )
+        } else {
+            Icon(
+                painter = painterResource(com.fortopes.tvlauncher.R.drawable.ic_tv),
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.align(Alignment.Center).padding(bottom = 22.dp).size(30.dp),
+            )
+        }
+        Column(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, end = 8.dp, bottom = 6.dp)) {
+            Text(
+                text = listOf(channel.number, channel.name).filter { it.isNotBlank() }.joinToString("  "),
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            channel.nowShowing?.let {
+                Text(text = it, color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
 private fun Color.darken(): Color = Color(red * 0.55f, green * 0.55f, blue * 0.55f, 1f)
 
 /** A film or show from Seerr: its backdrop, title, and a tick when it's already in your library. */

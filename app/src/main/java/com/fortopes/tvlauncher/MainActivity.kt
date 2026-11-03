@@ -22,6 +22,7 @@ import com.fortopes.tvlauncher.data.ContinueItem
 import com.fortopes.tvlauncher.data.ContinueWatchingRepository
 import com.fortopes.tvlauncher.data.JellyfinClient
 import com.fortopes.tvlauncher.data.JellyfinStore
+import com.fortopes.tvlauncher.data.LiveChannel
 import com.fortopes.tvlauncher.data.NowPlayingStore
 import com.fortopes.tvlauncher.data.WatchNextRepository
 import com.fortopes.tvlauncher.ui.JellyfinSetupScreen
@@ -106,6 +107,8 @@ class MainActivity : ComponentActivity() {
 
     private var apps by mutableStateOf<List<TvApp>>(emptyList())
     private var inputs by mutableStateOf<List<TvInput>>(emptyList())
+    private var tuners by mutableStateOf<List<TvInput>>(emptyList())
+    private var channels by mutableStateOf<List<LiveChannel>>(emptyList())
     private var loaded by mutableStateOf(false)
     /** Every app, before your order and hidden apps are applied; [apps] is what the row shows. */
     private var allApps: List<TvApp> = emptyList()
@@ -199,6 +202,8 @@ class MainActivity : ComponentActivity() {
                             seerrNeedsSetup = seerrStatus == null,
                             canPlayJellyfin = jellyfinStore.isSignedIn,
                             inputs = inputs,
+                            tuners = tuners,
+                            channels = channels,
                             home = home,
                             loadCamera = ::loadCamera,
                             loaded = loaded,
@@ -219,6 +224,20 @@ class MainActivity : ComponentActivity() {
                             },
                             onOpenApp = { if (!appRepo.launch(it)) toast("Couldn't open ${it.label}") },
                             onOpenInput = { if (!inputRepo.open(it)) toast("This TV didn't open ${it.label}") },
+                            onOpenTuner = { if (!inputRepo.openTuner(it)) toast("This TV didn't open ${it.label}") },
+                            onOpenChannel = { channel ->
+                                val play = ContinueItem(
+                                    key = "channel:${channel.id}", title = channel.name, subtitle = "", imageUrl = null, progress = null,
+                                    sourceLabel = "Jellyfin", sourcePackage = JellyfinClient.JELLYFIN_PACKAGE, lastWatched = 0L,
+                                    action = ContinueItem.Action.Jellyfin(channel.id, 0L),
+                                )
+                                if (!continueRepo.open(play, (application as TvHomeApp).scope)) toast("Couldn't open Jellyfin")
+                            },
+                            onOpenJellyfinGuide = {
+                                val launch = packageManager.getLeanbackLaunchIntentForPackage(JellyfinClient.JELLYFIN_PACKAGE)
+                                    ?: packageManager.getLaunchIntentForPackage(JellyfinClient.JELLYFIN_PACKAGE)
+                                if (launch == null) toast("Jellyfin isn't installed") else open(launch)
+                            },
                             onOpenLauncherSettings = { screen = Screen.Settings },
                             onHaRun = ::runHa,
                             onOpenCamera = {
@@ -388,6 +407,7 @@ class MainActivity : ComponentActivity() {
                 allApps = newApps
                 applyArrangement()
                 inputs = newInputs
+                tuners = withContext(Dispatchers.IO) { inputRepo.loadTuners() }
                 loaded = true
             }
         }
@@ -513,6 +533,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { continueRepo.load() }
             continueItems = result.items
+            // Live TV channels and what's on them, from the same Jellyfin sign-in.
+            channels = withContext(Dispatchers.IO) { runCatching { jellyfin.liveChannels() }.getOrDefault(channels) }
             if (result.jellyfinError != null && jellyfinStore.isSignedIn) {
                 jellyfinStatus = "${result.jellyfinError}. Press OK to sign in again."
             }
