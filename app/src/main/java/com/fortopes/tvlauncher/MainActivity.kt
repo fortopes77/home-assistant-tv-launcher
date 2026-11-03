@@ -57,7 +57,32 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+private const val STALE_REPEAT_MS = 60L
+private const val REPEAT_GAP_MS = 110L
+
 class MainActivity : ComponentActivity() {
+    private var lastRepeatAt = 0L
+
+    /**
+     * Holding an arrow sends a repeat about every 50 ms. A slow TV can't move and scroll that fast,
+     * so the repeats queue up and focus keeps sliding after the button is let go. Drop repeats that
+     * waited in the queue (the button may already be up) and space the rest out, so focus stops
+     * when the button does.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount > 0 && isArrow(event.keyCode)) {
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - event.eventTime > STALE_REPEAT_MS || now - lastRepeatAt < REPEAT_GAP_MS) return true
+            lastRepeatAt = now
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun isArrow(code: Int) = code == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
+        code == android.view.KeyEvent.KEYCODE_DPAD_RIGHT ||
+        code == android.view.KeyEvent.KEYCODE_DPAD_UP ||
+        code == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+
 
     private lateinit var prefs: LauncherPrefs
     private lateinit var appRepo: AppRepository

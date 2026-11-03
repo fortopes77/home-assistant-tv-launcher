@@ -49,6 +49,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -275,7 +276,17 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             // Coming back to a row lands on the card you left, like Projectivy.
-                            modifier = Modifier.focusRestorer(),
+                            // Left and right stop at the ends of the row instead of jumping to
+                            // whatever is nearest, such as the settings button above.
+                            modifier = Modifier
+                                .focusRestorer()
+                                .focusProperties {
+                                    exit = { dir ->
+                                        if (dir == FocusDirection.Left || dir == FocusDirection.Right) FocusRequester.Cancel
+                                        else FocusRequester.Default
+                                    }
+                                }
+                                .focusGroup(),
                         ) {
                             when (row) {
                                 is HomeRow.ContinueWatching -> {
