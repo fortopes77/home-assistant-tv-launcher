@@ -9,8 +9,8 @@ import androidx.core.content.ContextCompat
 
 /**
  * Reads the TV's shared "watch next" list (Android's TvProvider). Streaming apps such as Disney+ put what
- * you're part-way through there for the home screen to show. It needs the READ_EPG_DATA permission, which
- * Android asks you about once. What shows depends on each app: an app that doesn't publish to this list
+ * you're part-way through there for the home screen to show. It needs the TV listings permission
+ * (READ_TV_LISTINGS), which Android asks about once. What shows depends on each app: an app that doesn't publish to this list
  * won't appear.
  */
 class WatchNextRepository(context: Context) {
@@ -79,7 +79,7 @@ class WatchNextRepository(context: Context) {
 
     private fun Cursor.toItem(label: (String) -> String): ContinueItem? {
         val pkg = string(TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME) ?: return null
-        if (pkg == appContext.packageName || pkg == JellyfinClient.JELLYFIN_PACKAGE) return null // Jellyfin comes from its own API
+        if (pkg == appContext.packageName) return null
         if (int(TvContract.WatchNextPrograms.COLUMN_BROWSABLE) == 0) return null
         val intentUri = string(TvContract.WatchNextPrograms.COLUMN_INTENT_URI) ?: return null
         val intent = runCatching { Intent.parseUri(intentUri, Intent.URI_INTENT_SCHEME) }.getOrNull() ?: return null
@@ -119,6 +119,7 @@ class WatchNextRepository(context: Context) {
     private fun Cursor.int(col: String): Int? = getColumnIndex(col).takeIf { it >= 0 && !isNull(it) }?.let { getInt(it) }
 
     companion object {
-        const val PERMISSION = "com.android.providers.tv.permission.READ_EPG_DATA"
+        /** "TV listings": Android asks once. Without it, the list only holds Fortopes Home's own entries. */
+        const val PERMISSION = "android.permission.READ_TV_LISTINGS"
     }
 }

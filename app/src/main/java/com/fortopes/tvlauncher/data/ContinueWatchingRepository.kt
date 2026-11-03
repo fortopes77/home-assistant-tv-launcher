@@ -27,7 +27,9 @@ class ContinueWatchingRepository(
                 jellyfinError = if (it is HttpException && it.code == 401) "Jellyfin sign-in expired" else "Couldn't reach Jellyfin"
             }
             .getOrDefault(emptyList())
+        // Jellyfin's own resume list is better when you're signed in; otherwise its watch next entries do.
         val fromWatchNext = runCatching { watchNext.load() }.getOrDefault(emptyList())
+            .filter { fromJellyfin.isEmpty() || it.sourcePackage != JellyfinClient.JELLYFIN_PACKAGE }
         val fromNowPlaying = runCatching { nowPlaying.items() }.getOrDefault(emptyList())
         // An app in the watch next list is better (it opens the exact show), so it wins over a remembered one.
         val fromApps = fromWatchNext + fromNowPlaying.filter { np -> fromWatchNext.none { it.sourcePackage == np.sourcePackage } }

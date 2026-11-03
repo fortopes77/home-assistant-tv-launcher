@@ -34,6 +34,8 @@ fun SettingsScreen(
     lastError: String?,
     jellyfinStatus: String?,
     nowPlayingAccess: Boolean,
+    tvListingsAllowed: Boolean,
+    onAllowTvListings: () -> Unit,
     haStatus: String?,
     seerrStatus: String?,
     onSetUpSeerr: () -> Unit,
@@ -158,6 +160,20 @@ fun SettingsScreen(
                 headlineContent = { Text("Sign out of Jellyfin") },
             )
         }
+
+        ListItem(
+            selected = false,
+            onClick = onAllowTvListings,
+            modifier = rowModifier,
+            headlineContent = { Text("Google TV's continue watching") },
+            supportingContent = {
+                Text(
+                    if (tvListingsAllowed) "On. Shows what apps share with Google TV's home screen."
+                    else "Off. Press OK to allow \"TV listings\", so apps' continue watching shows here like on Google TV.",
+                )
+            },
+            trailingContent = { Text(if (tvListingsAllowed) "On" else "Off", color = if (tvListingsAllowed) TvColors.Cyan else TvColors.Muted) },
+        )
 
         ListItem(
             selected = false,
