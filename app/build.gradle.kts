@@ -9,7 +9,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.fortopes.tvlauncher"
+        // The Play Store ID. The code keeps its com.fortopes.tvlauncher package name, so the services'
+        // component names are com.fortopes.home/com.fortopes.tvlauncher.<class>.
+        applicationId = "com.fortopes.home"
         minSdk = 26
         targetSdk = 35
         // Every GitHub build gets a higher number, so a new APK always installs over the old one.

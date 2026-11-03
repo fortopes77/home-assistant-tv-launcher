@@ -39,7 +39,7 @@ Open TV Home's settings (the gear, top right). Nothing needs typing:
 - **Disney+, Binge and other apps:** TV Home needs notification access to see what's playing (it doesn't read or change your notifications). Android blocks that for sideloaded apps, so turn it on with ADB (see below):
 
   ```sh
-  adb shell cmd notification allow_listener com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.NowPlayingListener
+  adb shell cmd notification allow_listener com.fortopes.home/com.fortopes.tvlauncher.home.NowPlayingListener
   ```
 
   After that, anything you play in Disney+ or Binge shows up in Continue watching.
@@ -51,6 +51,9 @@ GitHub builds it on every push (**Actions → Build APK**, the `tv-home-apk` dow
 To build it yourself: `./gradlew assembleDebug` with the Android SDK installed, and the APK is `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Install it on the TV (no computer needed)
+
+The app's ID is `com.fortopes.home`. Builds before November 2026 used `com.fortopes.tvlauncher`, so if you have one of those, uninstall it first. Otherwise you'll end up with two copies of TV Home.
+
 
 1. Install **Downloader** (by AFTVnews) from the Play Store on the TV.
 2. In Downloader, type the APK's address: `https://github.com/fortopes77/home-assistant-tv-launcher/releases/download/latest/tv-home.apk`. The first time, the TV asks you to let Downloader install apps. Allow it, then install.
@@ -92,7 +95,7 @@ Android blocks two things for apps that didn't come from the Play Store: the acc
 3. **Lift the block, then use the switch on the TV.** This is the simplest fix, and it leaves other apps' accessibility services (such as Projectivy's) alone:
 
    ```sh
-   adb shell appops set com.fortopes.tvlauncher ACCESS_RESTRICTED_SETTINGS allow
+   adb shell appops set com.fortopes.home ACCESS_RESTRICTED_SETTINGS allow
    ```
 
    Then turn on Settings → System → Accessibility → **TV Home: Home button** on the TV.
@@ -106,24 +109,24 @@ Android blocks two things for apps that didn't come from the Play Store: the acc
    If it prints `null` or nothing, run:
 
    ```sh
-   adb shell settings put secure enabled_accessibility_services com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.HomeButtonService
+   adb shell settings put secure enabled_accessibility_services com.fortopes.home/com.fortopes.tvlauncher.home.HomeButtonService
    adb shell settings put secure accessibility_enabled 1
    ```
 
    If it printed something (another app's service, such as Projectivy's), keep it and add ours after a colon:
 
    ```sh
-   adb shell settings put secure enabled_accessibility_services <what it printed>:com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.HomeButtonService
+   adb shell settings put secure enabled_accessibility_services <what it printed>:com.fortopes.home/com.fortopes.tvlauncher.home.HomeButtonService
    adb shell settings put secure accessibility_enabled 1
    ```
 
 4. **Turn on "remember what's playing"** for Continue watching (Disney+, Binge):
 
    ```sh
-   adb shell cmd notification allow_listener com.fortopes.tvlauncher/com.fortopes.tvlauncher.home.NowPlayingListener
+   adb shell cmd notification allow_listener com.fortopes.home/com.fortopes.tvlauncher.home.NowPlayingListener
    ```
 
-To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstall com.fortopes.tvlauncher`.
+To remove TV Home: Settings → Apps → TV Home → Uninstall, or `adb uninstall com.fortopes.home`.
 
 ## Good to know
 
