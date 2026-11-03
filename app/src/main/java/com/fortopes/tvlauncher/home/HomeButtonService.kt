@@ -11,12 +11,12 @@ import com.fortopes.tvlauncher.MainActivity
 import com.fortopes.tvlauncher.data.LauncherPrefs
 
 /**
- * Brings up TV Home instead of the stock Google TV home, the way Projectivy does, without
+ * Brings up Fortopes Home instead of the stock Google TV home, the way Projectivy does, without
  * replacing the system's home screen. It does two things while the toggle is on:
  *
- * 1. Catches the remote's Home button and opens TV Home straight away.
+ * 1. Catches the remote's Home button and opens Fortopes Home straight away.
  * 2. Watches which app comes to the front. When the stock home appears anyway (Back out of an app,
- *    or a remote whose Home press doesn't reach accessibility services), it opens TV Home over it.
+ *    or a remote whose Home press doesn't reach accessibility services), it opens Fortopes Home over it.
  *
  * With the toggle off it does nothing, so Home behaves exactly as stock.
  */
@@ -64,7 +64,7 @@ class HomeButtonService : AccessibilityService() {
         if (pkg in stockHomePackages) {
             if (!prefs.bypassStockHome) openLauncher()
         } else if (prefs.bypassStockHome && pkg !in PASSING_WINDOWS && pkg != packageName) {
-            // An app was opened from the stock home, so the next return to it comes back to TV Home.
+            // An app was opened from the stock home, so the next return to it comes back to Fortopes Home.
             prefs.bypassStockHome = false
         }
     }

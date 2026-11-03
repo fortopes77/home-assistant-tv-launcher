@@ -7,7 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 /**
- * Saves the last crash so TV Home's settings can show it. There's no other way to see one on a TV
+ * Saves the last crash so Fortopes Home's settings can show it. There's no other way to see one on a TV
  * without ADB, and a crash in the Home button service makes Android switch the service off.
  */
 class TvHomeApp : Application() {

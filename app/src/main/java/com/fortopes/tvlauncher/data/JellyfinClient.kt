@@ -48,7 +48,7 @@ class JellyfinClient(private val store: JellyfinStore) {
 
     private fun authHeader(token: String? = store.token): Map<String, String> {
         val value = buildString {
-            append("MediaBrowser Client=\"TV Home\", Device=\"Google TV\", DeviceId=\"${store.deviceId}\", Version=\"1.0\"")
+            append("MediaBrowser Client=\"Fortopes Home\", Device=\"Google TV\", DeviceId=\"${store.deviceId}\", Version=\"1.0\"")
             if (!token.isNullOrBlank()) append(", Token=\"$token\"")
         }
         // Newer servers read Authorization, older ones X-Emby-Authorization.

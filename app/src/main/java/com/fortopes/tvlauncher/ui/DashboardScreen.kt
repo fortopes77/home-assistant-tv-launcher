@@ -31,7 +31,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.tv.material3.Text
 
 /**
- * The dashboard's TV screen (`?tv`) inside TV Home, for everything the Home row doesn't have. Back goes to
+ * The dashboard's TV screen (`?tv`) inside Fortopes Home, for everything the Home row doesn't have. Back goes to
  * the dashboard first (to leave a full-screen camera or a tab) and closes it when the dashboard is done.
  */
 @SuppressLint("SetJavaScriptEnabled")

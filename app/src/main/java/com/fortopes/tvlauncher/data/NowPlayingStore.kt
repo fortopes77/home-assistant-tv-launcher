@@ -12,7 +12,7 @@ import java.io.File
 
 /**
  * Remembers the last thing each app played (Disney+, Binge, ...), from Android's "now playing" info.
- * Those apps don't share a continue-watching list TV Home can read, so this is the next best thing:
+ * Those apps don't share a continue-watching list Fortopes Home can read, so this is the next best thing:
  * the show's name and picture, and OK opens the app.
  */
 class NowPlayingStore(context: Context) {
@@ -96,7 +96,7 @@ class NowPlayingStore(context: Context) {
         }
     }
 
-    /** Whether Android has given TV Home notification access, which reading "now playing" needs. */
+    /** Whether Android has given Fortopes Home notification access, which reading "now playing" needs. */
     fun hasAccess(): Boolean {
         val enabled = Settings.Secure.getString(appContext.contentResolver, "enabled_notification_listeners") ?: return false
         val ours = ComponentName(appContext, NowPlayingListener::class.java)

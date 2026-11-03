@@ -9,7 +9,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.fortopes.tvlauncher"
+        // The Play Store ID. The code keeps its com.fortopes.tvlauncher package name, so the services'
+        // component names are com.fortopes.home/com.fortopes.tvlauncher.<class>.
+        applicationId = "com.fortopes.home"
         minSdk = 26
         targetSdk = 35
         // Every GitHub build gets a higher number, so a new APK always installs over the old one.
@@ -25,6 +27,24 @@ android {
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
+        }
+        // The Play Store upload key. It lives in GitHub secrets, never in the repo: the workflow decodes it to
+        // a file and passes its path and password in, so only GitHub's builds can sign a Play bundle.
+        val uploadKey = System.getenv("UPLOAD_KEYSTORE_FILE")
+        if (uploadKey != null) {
+            create("upload") {
+                storeFile = file(uploadKey)
+                storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = "upload"
+                keyPassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
 

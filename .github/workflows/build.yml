@@ -11,6 +11,8 @@ jobs:
   build:
     # GitHub's Ubuntu runners come with the Android SDK installed (ANDROID_HOME), so no setup step is needed.
     runs-on: ubuntu-latest
+    env:
+      HAS_UPLOAD_KEY: ${{ secrets.UPLOAD_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -32,6 +34,19 @@ jobs:
           name: tv-home-apk
           path: tv-home.apk
 
+      # The Play Store bundle, signed with the upload key from the repo's secrets (UPLOAD_KEYSTORE_BASE64 and
+      # UPLOAD_KEYSTORE_PASSWORD). Skipped until those are added.
+      - name: Build the Play Store bundle
+        if: env.HAS_UPLOAD_KEY == 'true'
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$UPLOAD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          UPLOAD_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks" ./gradlew --no-daemon bundleRelease
+          cp app/build/outputs/bundle/release/app-release.aab tv-home.aab
+          rm "$RUNNER_TEMP/upload.jks"
+
       # Every build of main replaces tv-home.apk on the "latest" release, so there's one link to download.
       - name: Publish to the latest release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -40,5 +55,8 @@ jobs:
           tag_name: latest
           name: Latest build
           prerelease: true
-          files: tv-home.apk
-          body: Download tv-home.apk and install it with `adb install -r tv-home.apk`. See the README for the steps.
+          files: |
+            tv-home.apk
+            tv-home.aab
+          fail_on_unmatched_files: false
+          body: tv-home.apk is for sideloading (Downloader or ADB). tv-home.aab is the bundle to upload to Google Play. See the README.
