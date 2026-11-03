@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The TV's shared "watch next" list, where apps like Disney+ put what you're part-way through. -->
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
+    <!-- The permission that actually lets Fortopes Home read other apps' "watch next" entries (Android asks once).
+         READ_EPG_DATA above is no longer enforced, so without this Android only shows an app its own entries. -->
+    <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

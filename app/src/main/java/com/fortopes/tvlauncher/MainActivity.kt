@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
@@ -102,6 +103,13 @@ class MainActivity : ComponentActivity() {
     private var dashboardUrl = ""
     /** Where Back from Home Assistant setup goes: the screen it was opened from. */
     private var haSetupReturn = Screen.Home
+
+    /** Asks for "TV listings", which lets the Continue watching row show Google TV's watch next entries. */
+    private val askTvListings = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        tvListingsAllowed = it
+        reloadContinue()
+    }
+    private var tvListingsAllowed by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -224,6 +232,20 @@ class MainActivity : ComponentActivity() {
                             lastError = lastError,
                             jellyfinStatus = jellyfinStatus,
                             nowPlayingAccess = nowPlayingAccess,
+                            tvListingsAllowed = tvListingsAllowed,
+                            onAllowTvListings = {
+                                if (tvListingsAllowed) {
+                                    toast("Already on")
+                                } else if (shouldShowRequestPermissionRationale(WatchNextRepository.PERMISSION) ||
+                                    !getPreferences(MODE_PRIVATE).getBoolean("asked_tv_listings_twice", false)
+                                ) {
+                                    getPreferences(MODE_PRIVATE).edit().putBoolean("asked_tv_listings_twice", true).apply()
+                                    askTvListings.launch(WatchNextRepository.PERMISSION)
+                                } else {
+                                    // Android won't ask again; the app's permissions page can turn it on.
+                                    open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                                }
+                            },
                             haStatus = haStatus,
                             seerrStatus = seerrStatus,
                             onSetUpSeerr = { screen = Screen.SeerrSetup },
@@ -298,6 +320,12 @@ class MainActivity : ComponentActivity() {
         serviceEnabled = prefs.isServiceEnabled()
         refreshStatus()
         reload() // picks up apps installed or removed while we were away
+        tvListingsAllowed = watchNext.hasPermission
+        // Ask once, the first time; after that it's in the gear if you said no.
+        if (!tvListingsAllowed && !getPreferences(MODE_PRIVATE).getBoolean("asked_tv_listings", false)) {
+            getPreferences(MODE_PRIVATE).edit().putBoolean("asked_tv_listings", true).apply()
+            runCatching { askTvListings.launch(WatchNextRepository.PERMISSION) }
+        }
         reloadContinue()
         reloadRecommended()
         startHomePolling()

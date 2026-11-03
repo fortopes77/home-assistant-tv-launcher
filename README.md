@@ -33,6 +33,8 @@ The TV checks they work before saving. **Full dashboard** expects the dashboard 
 
 ## Set up Continue watching
 
+- **Google TV's continue watching:** the first time Fortopes Home opens, Android asks to let it access **TV listings**. Allow it, and whatever apps share with Google TV's home screen shows up in the row, the same way it does in Projectivy. If you said no, turn it on from the gear → **Google TV's continue watching**.
+
 Open Fortopes Home's settings (the gear, top right). Nothing needs typing:
 
 - **Jellyfin:** press OK on Jellyfin. Fortopes Home finds your server on the network and shows a code. On your phone, open the Jellyfin app → Settings → **Quick Connect** and enter it. (If the TV says Quick Connect is off, turn it on in Jellyfin's Dashboard → General.) If the server isn't found, type its address in the box, like `192.168.1.20`.
