@@ -75,10 +75,11 @@ Keep a copy of the upload key file somewhere safe. If it's lost, Play support ca
 In the Play Console:
 1. **Create app.** Name: Fortopes Home. App or game: App. Free.
 2. **Turn on Android TV.** Under **Test and release → Advanced settings → Form factors**, add **Android TV**.
-3. **Fill in App content.** For the privacy policy, use `https://github.com/fortopes77/home-assistant-tv-launcher/blob/main/PRIVACY.md`. Also fill in the content rating, target audience (18+), data safety (no data collected or shared), and ads (none). In the **Accessibility API** declaration, say the service only catches the Home button to open Fortopes Home, the same as other launchers.
-4. **Make the internal testing release.** Under **Test and release → Testing → Internal testing**, create a release. Accept **Play App Signing**, upload `tv-home.aab`, and roll it out.
-5. **Add yourself as a tester.** On the **Testers** tab, add your Google account, then open the opt-in link on your phone and accept.
-6. **Install it on the TV.** First uninstall the sideloaded Fortopes Home, because Play's copy is signed differently. Then install Fortopes Home from the Play Store on the TV. You'll need to connect Home Assistant, Jellyfin and Seerr again.
+3. **Add the store listing graphics.** Under **Grow users → Store presence → Main store listing**, use `store/icon-512.png` from this repo as the app icon.
+4. **Fill in App content.** For the privacy policy, use `https://github.com/fortopes77/home-assistant-tv-launcher/blob/main/PRIVACY.md`. Also fill in the content rating, target audience (18+), data safety (no data collected or shared), and ads (none). In the **Accessibility API** declaration, say the service only catches the Home button to open Fortopes Home, the same as other launchers.
+5. **Make the internal testing release.** Under **Test and release → Testing → Internal testing**, create a release. Accept **Play App Signing**, upload `tv-home.aab`, and roll it out.
+6. **Add yourself as a tester.** On the **Testers** tab, add your Google account, then open the opt-in link on your phone and accept.
+7. **Install it on the TV.** First uninstall the sideloaded Fortopes Home, because Play's copy is signed differently. Then install Fortopes Home from the Play Store on the TV. You'll need to connect Home Assistant, Jellyfin and Seerr again.
 
 For an update, upload the newer `tv-home.aab` as a new internal testing release.
 
