@@ -69,12 +69,12 @@ class HomeButtonService : AccessibilityService() {
         if (camera != null) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_BACK -> {
-                    if (event.action == KeyEvent.ACTION_UP) doorbell?.dismiss()
+                    if (event.action == KeyEvent.ACTION_UP) doorbell?.dismiss(resume = true)
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                     if (event.action == KeyEvent.ACTION_UP) {
-                        doorbell?.dismiss()
+                        doorbell?.dismiss(resume = false)
                         openLauncher(camera)
                     }
                     return true

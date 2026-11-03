@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
+import android.view.KeyEvent
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
@@ -46,6 +48,9 @@ class DoorbellPopup(private val context: Context, private val onError: (String, 
     private var view: View? = null
     private var image: ImageView? = null
     private var lastShownAt = 0L
+    private val audio = context.getSystemService(AudioManager::class.java)
+    /** Whether the pop-up paused what was playing, so Back can carry on with it. */
+    @Volatile private var pausedIt = false
 
     /** The camera on screen right now, or null when the pop-up isn't showing. */
     @Volatile var cameraShowing: String? = null
@@ -93,6 +98,10 @@ class DoorbellPopup(private val context: Context, private val onError: (String, 
     fun show() {
         if (System.currentTimeMillis() - lastShownAt < 20_000L && cameraShowing != null) return // still up
         lastShownAt = System.currentTimeMillis()
+        // Pause the show straight away, before the camera picture arrives.
+        if (store.doorbellPause && !pausedIt && runCatching { audio.isMusicActive }.getOrDefault(false)) {
+            pausedIt = mediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
+        }
         showing?.cancel()
         showing = scope.launch {
             val camera = runCatching { pickCamera() }.getOrNull()
@@ -120,12 +129,20 @@ class DoorbellPopup(private val context: Context, private val onError: (String, 
         }
     }
 
-    /** Closes the pop-up (Back). */
-    fun dismiss() {
+    /** Closes the pop-up. [resume] (Back) carries on with what it paused; OK leaves it paused for the camera. */
+    fun dismiss(resume: Boolean) {
+        if (resume && pausedIt) mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+        pausedIt = false
         showing?.cancel()
         cameraShowing = null
         main.post { hide() }
     }
+
+    /** Sends a play or pause press to whatever app is playing, like the remote's own media buttons. */
+    private fun mediaKey(code: Int): Boolean = runCatching {
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+    }.onFailure { onError("Doorbell pause", it) }.isSuccess
 
     private fun rang(now: HaEntity, before: String): Boolean = when (now.domain) {
         // An event entity's state is the time of the last press.
@@ -158,7 +175,7 @@ class DoorbellPopup(private val context: Context, private val onError: (String, 
             setPadding(0, dp(8), 0, 0)
         }
         val hint = TextView(context).apply {
-            text = "OK to watch · Back to close"
+            text = if (pausedIt) "Paused · OK to watch · Back to carry on" else "OK to watch · Back to close"
             setTextColor(0xB3FFFFFF.toInt())
             textSize = 12f
         }

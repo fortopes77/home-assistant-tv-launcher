@@ -33,6 +33,11 @@ class HaStore(context: Context) {
         get() = prefs.getBoolean("doorbell_chosen", false)
         set(value) = prefs.edit().putBoolean("doorbell_chosen", value).apply()
 
+    /** Whether the doorbell pauses what's playing. On unless you turn it off. */
+    var doorbellPause: Boolean
+        get() = prefs.getBoolean("doorbell_pause", true)
+        set(value) = prefs.edit().putBoolean("doorbell_pause", value).apply()
+
     /** The camera the pop-up shows. Null picks the one that goes with the sensor. */
     var doorbellCamera: String?
         get() = prefs.getString("doorbell_camera", null)

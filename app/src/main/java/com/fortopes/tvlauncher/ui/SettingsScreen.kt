@@ -57,6 +57,8 @@ fun SettingsScreen(
     onPickDoorbellSensor: (String?) -> Unit,
     onPickDoorbellCamera: (String?) -> Unit,
     onTestDoorbell: () -> Unit,
+    doorbellPause: Boolean,
+    onToggleDoorbellPause: (Boolean) -> Unit,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -271,10 +273,23 @@ fun SettingsScreen(
                 )
                 ListItem(
                     selected = false,
+                    onClick = { onToggleDoorbellPause(!doorbellPause) },
+                    modifier = rowModifier,
+                    headlineContent = { Text("Pause what's playing") },
+                    supportingContent = {
+                        Text(
+                            if (doorbellPause) "On: the doorbell pauses the show. Back on the pop-up carries on, OK leaves it paused."
+                            else "Off: the show keeps playing under the pop-up.",
+                        )
+                    },
+                    trailingContent = { Switch(checked = doorbellPause, onCheckedChange = null) },
+                )
+                ListItem(
+                    selected = false,
                     onClick = onTestDoorbell,
                     modifier = rowModifier,
                     headlineContent = { Text("Try the doorbell pop-up") },
-                    supportingContent = { Text("Shows it now for 30 seconds. Back closes it, OK opens the camera.") },
+                    supportingContent = { Text("Shows it now for 30 seconds, pausing what is playing. Back closes it, OK opens the camera.") },
                 )
             }
         }
