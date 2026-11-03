@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.fortopes.tvlauncher"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // The Play Store ID. The code keeps its com.fortopes.tvlauncher package name, so the services'
         // component names are com.fortopes.home/com.fortopes.tvlauncher.<class>.
         applicationId = "com.fortopes.home"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // Every GitHub build gets a higher number, so a new APK always installs over the old one.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.1.$versionCode"
