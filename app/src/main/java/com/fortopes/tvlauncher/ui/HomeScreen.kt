@@ -49,7 +49,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -77,6 +76,13 @@ import com.fortopes.tvlauncher.data.TvApp
 import com.fortopes.tvlauncher.data.TvInput
 import kotlinx.coroutines.delay
 import java.util.Date
+
+/**
+ * The last card in a row: right does nothing, instead of jumping to whatever is nearest
+ * (such as the settings button above).
+ */
+private fun Modifier.rowEnd(last: Boolean): Modifier =
+    if (last) focusProperties { right = FocusRequester.Cancel } else this
 
 /** What the big title at the top shows: whatever the remote is on. */
 private data class Spotlight(val title: String, val subtitle: String, val color: Color)
@@ -289,17 +295,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             // Coming back to a row lands on the card you left, like Projectivy.
-                            // Left and right stop at the ends of the row instead of jumping to
-                            // whatever is nearest, such as the settings button above.
-                            modifier = Modifier
-                                .focusRestorer()
-                                .focusProperties {
-                                    exit = { dir ->
-                                        if (dir == FocusDirection.Left || dir == FocusDirection.Right) FocusRequester.Cancel
-                                        else FocusRequester.Default
-                                    }
-                                }
-                                .focusGroup(),
+                            modifier = Modifier.focusRestorer(),
                         ) {
                             when (row) {
                                 is HomeRow.ContinueWatching -> {
@@ -309,6 +305,7 @@ fun HomeScreen(
                                             onClick = { onOpenContinue(item) },
                                             modifier = Modifier
                                                 .firstIf(isFirstRow && i == 0, firstCard)
+                                                .rowEnd(!row.showSetup && i == row.items.lastIndex)
                                                 .onFocusChanged {
                                                     if (it.isFocused) {
                                                         val sub = listOf(item.subtitle, item.sourceLabel).filter { s -> s.isNotBlank() }
@@ -325,6 +322,7 @@ fun HomeScreen(
                                                 onClick = onOpenLauncherSettings,
                                                 modifier = Modifier
                                                     .firstIf(isFirstRow, firstCard)
+                                                    .rowEnd(true)
                                                     .onFocusChanged {
                                                         if (it.isFocused) {
                                                             spotlight = Spotlight(
@@ -353,6 +351,7 @@ fun HomeScreen(
                                         moving = moving,
                                         modifier = Modifier
                                             .firstIf(isFirstRow && i == 0, firstCard)
+                                            .rowEnd(i == row.apps.lastIndex)
                                             .focusRequester(appFocus.getOrPut(app.key) { FocusRequester() })
                                             .bringIntoViewRequester(bringIntoView)
                                             .onPreviewKeyEvent { e ->
@@ -387,6 +386,7 @@ fun HomeScreen(
                                             onClick = { seerrKey = item.key },
                                             modifier = Modifier
                                                 .firstIf(isFirstRow && i == 0, firstCard)
+                                                .rowEnd(!row.showSetup && i == row.items.lastIndex)
                                                 .focusRequester(seerrFocus.getOrPut(item.key) { FocusRequester() })
                                                 .onFocusChanged {
                                                     if (it.isFocused) {
@@ -404,6 +404,7 @@ fun HomeScreen(
                                                 onClick = onSetUpSeerr,
                                                 modifier = Modifier
                                                     .firstIf(isFirstRow, firstCard)
+                                                    .rowEnd(true)
                                                     .onFocusChanged {
                                                         if (it.isFocused) spotlight = Spotlight("Recommended", "Connect Seerr for trending films and series, trailers and requests", TvColors.Blue)
                                                     },
@@ -422,7 +423,7 @@ fun HomeScreen(
                                                 label = "Connect",
                                                 icon = R.drawable.ic_home_glyph,
                                                 onClick = onSetUpHa,
-                                                modifier = Modifier.spot("Home Assistant", "Connect from your phone with a QR code", 0),
+                                                modifier = Modifier.spot("Home Assistant", "Connect from your phone with a QR code", 0).rowEnd(true),
                                             )
                                         }
                                     } else if (state.error != null) {
@@ -431,7 +432,7 @@ fun HomeScreen(
                                                 label = "Reconnect",
                                                 icon = R.drawable.ic_home_glyph,
                                                 onClick = onSetUpHa,
-                                                modifier = Modifier.spot(state.error, "Press OK to connect again", 0),
+                                                modifier = Modifier.spot(state.error, "Press OK to connect again", 0).rowEnd(true),
                                             )
                                         }
                                     } else {
@@ -488,7 +489,7 @@ fun HomeScreen(
                                                 label = "Full dashboard",
                                                 icon = R.drawable.ic_dashboard,
                                                 onClick = onOpenDashboard,
-                                                modifier = Modifier.spot("Full dashboard", "Your Home Assistant TV screen: cameras, calendar, solar, rooms", i),
+                                                modifier = Modifier.spot("Full dashboard", "Your Home Assistant TV screen: cameras, calendar, solar, rooms", i).rowEnd(true),
                                             )
                                         }
                                     }
@@ -502,6 +503,7 @@ fun HomeScreen(
                                             colors = listOf(TvColors.Purple, TvColors.Blue),
                                             modifier = Modifier
                                                 .firstIf(isFirstRow && i == 0, firstCard)
+                                                .rowEnd(row.channels.isEmpty() && i == row.tuners.lastIndex)
                                                 .onFocusChanged {
                                                     if (it.isFocused) spotlight = Spotlight(tuner.label, "Live TV from the aerial", TvColors.Blue)
                                                 },
@@ -528,7 +530,7 @@ fun HomeScreen(
                                                 icon = R.drawable.ic_guide,
                                                 detail = "Jellyfin guide",
                                                 onClick = onOpenJellyfinGuide,
-                                                modifier = Modifier.onFocusChanged {
+                                                modifier = Modifier.rowEnd(true).onFocusChanged {
                                                     if (it.isFocused) spotlight = Spotlight("All channels", "Opens Jellyfin, then pick Live TV for the guide", TvColors.Purple)
                                                 },
                                             )
@@ -543,6 +545,7 @@ fun HomeScreen(
                                             onClick = { onOpenInput(input) },
                                             modifier = Modifier
                                                 .firstIf(isFirstRow && i == 0, firstCard)
+                                                .rowEnd(i == row.inputs.lastIndex)
                                                 .onFocusChanged {
                                                     if (it.isFocused) spotlight = Spotlight(input.label, "TV input", TvColors.Blue)
                                                 },
