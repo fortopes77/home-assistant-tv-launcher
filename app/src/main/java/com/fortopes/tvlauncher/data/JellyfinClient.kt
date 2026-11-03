@@ -10,6 +10,9 @@ import java.net.URLEncoder
 import java.time.Instant
 import java.util.UUID
 
+/** A Live TV channel in Jellyfin, with what's on it now. */
+data class LiveChannel(val id: String, val name: String, val number: String, val logoUrl: String?, val nowShowing: String?)
+
 /** A Jellyfin server found on the network. */
 data class JellyfinServer(val name: String, val url: String)
 
@@ -160,6 +163,31 @@ class JellyfinClient(private val store: JellyfinStore) {
                 action = ContinueItem.Action.Jellyfin(id, userData?.optLong("PlaybackPositionTicks") ?: 0L),
             )
         }
+    }
+
+    /** Jellyfin's Live TV channels in channel-number order, or none when Live TV isn't set up. */
+    fun liveChannels(limit: Int = 40): List<LiveChannel> {
+        if (!store.isSignedIn) return emptyList()
+        val url = store.url!!
+        val q = "userId=${store.userId}&Limit=$limit&EnableImageTypes=Primary&ImageTypeLimit=1&AddCurrentProgram=true&EnableUserData=false&SortBy=SortName"
+        val text = try {
+            Http.request("GET", "$url/LiveTv/Channels?$q", authHeader())
+        } catch (e: HttpException) {
+            if (e.code == 401) throw e
+            return emptyList() // Live TV isn't set up on this server
+        }
+        val items = Http.obj(text).optJSONArray("Items") ?: return emptyList()
+        return (0 until items.length()).map { i ->
+            val it = items.getJSONObject(i)
+            val id = it.getString("Id")
+            LiveChannel(
+                id = id,
+                name = it.optString("Name"),
+                number = it.optString("ChannelNumber").ifBlank { it.optString("Number") },
+                logoUrl = if (it.optJSONObject("ImageTags")?.has("Primary") == true) "$url/Items/$id/Images/Primary?maxWidth=320&quality=90" else null,
+                nowShowing = it.optJSONObject("CurrentProgram")?.optString("Name")?.takeIf { n -> n.isNotBlank() },
+            )
+        }.sortedWith(compareBy({ it.number.substringBefore('.').toIntOrNull() ?: Int.MAX_VALUE }, { it.number }, { it.name }))
     }
 
     /**

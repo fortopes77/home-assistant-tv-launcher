@@ -49,6 +49,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -70,6 +71,7 @@ import com.fortopes.tvlauncher.R
 import com.fortopes.tvlauncher.data.ContinueItem
 import com.fortopes.tvlauncher.data.HaEntity
 import com.fortopes.tvlauncher.data.HomeState
+import com.fortopes.tvlauncher.data.LiveChannel
 import com.fortopes.tvlauncher.data.SeerrItem
 import com.fortopes.tvlauncher.data.TvApp
 import com.fortopes.tvlauncher.data.TvInput
@@ -108,6 +110,12 @@ private sealed interface HomeRow {
         override val title = "Home"
     }
 
+    /** The TV's free to air tuner, then Jellyfin's Live TV channels and a way into its guide. */
+    data class LiveTv(val tuners: List<TvInput>, val channels: List<LiveChannel>) : HomeRow {
+        override val key = "livetv"
+        override val title = "Live TV"
+    }
+
     data class Inputs(val inputs: List<TvInput>) : HomeRow {
         override val key = "inputs"
         override val title = "Inputs"
@@ -124,6 +132,8 @@ fun HomeScreen(
     seerrNeedsSetup: Boolean,
     canPlayJellyfin: Boolean,
     inputs: List<TvInput>,
+    tuners: List<TvInput>,
+    channels: List<LiveChannel>,
     home: HomeState?,
     loadCamera: suspend (String) -> ImageBitmap?,
     loaded: Boolean,
@@ -136,6 +146,9 @@ fun HomeScreen(
     onOpenContinue: (ContinueItem) -> Unit,
     onOpenApp: (TvApp) -> Unit,
     onOpenInput: (TvInput) -> Unit,
+    onOpenTuner: (TvInput) -> Unit,
+    onOpenChannel: (LiveChannel) -> Unit,
+    onOpenJellyfinGuide: () -> Unit,
     onOpenLauncherSettings: () -> Unit,
     onHaRun: (HaEntity) -> Unit,
     onOpenCamera: (Int) -> Unit,
@@ -146,12 +159,13 @@ fun HomeScreen(
     onSeerrPlay: (SeerrItem) -> Unit,
     onSeerrRequest: (SeerrItem) -> Unit,
 ) {
-    val rows = remember(continueItems, continueNeedsSetup, apps, recommended, seerrNeedsSetup, inputs, home) {
+    val rows = remember(continueItems, continueNeedsSetup, apps, recommended, seerrNeedsSetup, inputs, tuners, channels, home) {
         buildList {
             if (continueItems.isNotEmpty() || continueNeedsSetup) {
                 add(HomeRow.ContinueWatching(continueItems, showSetup = continueItems.isEmpty()))
             }
             if (apps.isNotEmpty()) add(HomeRow.Apps(apps))
+            if (tuners.isNotEmpty() || channels.isNotEmpty()) add(HomeRow.LiveTv(tuners, channels))
             if (recommended.isNotEmpty() || seerrNeedsSetup) add(HomeRow.Recommended(recommended, showSetup = seerrNeedsSetup))
             add(HomeRow.Home(home))
             if (inputs.isNotEmpty()) add(HomeRow.Inputs(inputs))
@@ -275,7 +289,17 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             // Coming back to a row lands on the card you left, like Projectivy.
-                            modifier = Modifier.focusRestorer(),
+                            // Left and right stop at the ends of the row instead of jumping to
+                            // whatever is nearest, such as the settings button above.
+                            modifier = Modifier
+                                .focusRestorer()
+                                .focusProperties {
+                                    exit = { dir ->
+                                        if (dir == FocusDirection.Left || dir == FocusDirection.Right) FocusRequester.Cancel
+                                        else FocusRequester.Default
+                                    }
+                                }
+                                .focusGroup(),
                         ) {
                             when (row) {
                                 is HomeRow.ContinueWatching -> {
@@ -465,6 +489,48 @@ fun HomeScreen(
                                                 icon = R.drawable.ic_dashboard,
                                                 onClick = onOpenDashboard,
                                                 modifier = Modifier.spot("Full dashboard", "Your Home Assistant TV screen: cameras, calendar, solar, rooms", i),
+                                            )
+                                        }
+                                    }
+                                }
+                                is HomeRow.LiveTv -> {
+                                    itemsIndexed(row.tuners, key = { _, t -> "tuner:${t.id}" }) { i, tuner ->
+                                        GlyphCard(
+                                            label = tuner.label,
+                                            icon = R.drawable.ic_tv,
+                                            onClick = { onOpenTuner(tuner) },
+                                            colors = listOf(TvColors.Purple, TvColors.Blue),
+                                            modifier = Modifier
+                                                .firstIf(isFirstRow && i == 0, firstCard)
+                                                .onFocusChanged {
+                                                    if (it.isFocused) spotlight = Spotlight(tuner.label, "Live TV from the aerial", TvColors.Blue)
+                                                },
+                                        )
+                                    }
+                                    itemsIndexed(row.channels, key = { _, c -> "channel:${c.id}" }) { i, channel ->
+                                        ChannelCard(
+                                            channel = channel,
+                                            onClick = { onOpenChannel(channel) },
+                                            modifier = Modifier
+                                                .firstIf(isFirstRow && row.tuners.isEmpty() && i == 0, firstCard)
+                                                .onFocusChanged {
+                                                    if (it.isFocused) {
+                                                        val sub = listOfNotNull(channel.nowShowing?.let { n -> "Now: $n" }, "Jellyfin").joinToString(" · ")
+                                                        spotlight = Spotlight(channel.name, sub, TvColors.Purple)
+                                                    }
+                                                },
+                                        )
+                                    }
+                                    if (row.channels.isNotEmpty()) {
+                                        item(key = "jellyfin-guide") {
+                                            GlyphCard(
+                                                label = "All channels",
+                                                icon = R.drawable.ic_guide,
+                                                detail = "Jellyfin guide",
+                                                onClick = onOpenJellyfinGuide,
+                                                modifier = Modifier.onFocusChanged {
+                                                    if (it.isFocused) spotlight = Spotlight("All channels", "Opens Jellyfin, then pick Live TV for the guide", TvColors.Purple)
+                                                },
                                             )
                                         }
                                     }
