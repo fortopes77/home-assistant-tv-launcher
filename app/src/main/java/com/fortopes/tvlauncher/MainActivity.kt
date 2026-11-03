@@ -389,6 +389,7 @@ class MainActivity : ComponentActivity() {
                             doorbellCamera = doorbellCamera,
                             onPickDoorbellSensor = { id ->
                                 haStore.doorbellSensor = id
+                                haStore.doorbellChosen = true
                                 doorbellSensor = id
                                 restartDoorbell()
                             },
@@ -514,6 +515,10 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val states = withContext(Dispatchers.IO) { runCatching { ha.states() }.getOrNull() } ?: return@launch
             doorbellSensors = DoorbellPopup.candidates(states)
+            if (DoorbellPopup.autoPick(haStore, states) != doorbellSensor) {
+                doorbellSensor = haStore.doorbellSensor
+                restartDoorbell()
+            }
             doorbellCameras = states.filter { it.domain == "camera" && !it.unavailable }.sortedBy { it.name.lowercase() }
         }
     }

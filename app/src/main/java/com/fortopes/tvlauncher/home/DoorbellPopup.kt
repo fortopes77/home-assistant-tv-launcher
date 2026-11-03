@@ -57,8 +57,14 @@ class DoorbellPopup(private val context: Context, private val onError: (String, 
         watching = scope.launch {
             var wait = 15_000L
             while (isActive) {
-                val sensor = store.doorbellSensor
-                if (!store.isSignedIn || sensor == null) return@launch
+                if (!store.isSignedIn || (store.doorbellChosen && store.doorbellSensor == null)) return@launch // off
+                val sensor = store.doorbellSensor ?: runCatching { autoPick(store, client.states()) }.getOrNull()
+                if (sensor == null) {
+                    // No doorbell in Home Assistant yet (or it couldn't be reached): look again later.
+                    delay(wait)
+                    wait = (wait * 2).coerceAtMost(5 * 60_000L)
+                    continue
+                }
                 val error = runCatching {
                     var last: String? = null
                     HaLive(store) { it == sensor }.updates().collect { states ->
@@ -208,15 +214,32 @@ class DoorbellPopup(private val context: Context, private val onError: (String, 
 
         /** Sensors that make sense as a doorbell: doorbell buttons first, then person detection. */
         fun candidates(states: List<HaEntity>): List<HaEntity> {
-            val bell = Regex("doorbell|visitor|ding|ring|button|press", RegexOption.IGNORE_CASE)
             fun rank(e: HaEntity): Int = when {
-                e.domain == "event" && e.attributes.optString("device_class") == "doorbell" -> 0
-                bell.containsMatchIn(e.id) || bell.containsMatchIn(e.name) -> 0
+                isBell(e) -> 0
                 e.domain == "binary_sensor" && (e.id.contains("person") || e.name.contains("person", true)) -> 1
                 else -> 9
             }
             return states.filter { (it.domain == "binary_sensor" || it.domain == "event") && rank(it) < 9 }
                 .sortedWith(compareBy<HaEntity> { rank(it) }.thenBy { it.name.lowercase() })
+        }
+
+        private val BELL = Regex("door.?bell|visitor|ding|ring|button|press", RegexOption.IGNORE_CASE)
+
+        /** A doorbell press sensor, like Reolink's "Door Bell Visitor" or an event entity of class doorbell. */
+        private fun isBell(e: HaEntity) = (e.domain == "binary_sensor" || e.domain == "event") &&
+            ((e.domain == "event" && e.attributes.optString("device_class") == "doorbell") ||
+                BELL.containsMatchIn(e.id) || BELL.containsMatchIn(e.name))
+
+        /**
+         * Until you pick in settings, a doorbell button found in Home Assistant is used on its own, so the
+         * pop-up just works. Returns the sensor, or null if there isn't one (or you turned it off).
+         */
+        fun autoPick(store: HaStore, states: List<HaEntity>): String? {
+            if (store.doorbellChosen) return store.doorbellSensor
+            store.doorbellSensor?.let { return it }
+            val bell = states.filter { isBell(it) && !it.unavailable }.minByOrNull { it.name.lowercase() } ?: return null
+            store.doorbellSensor = bell.id
+            return bell.id
         }
 
         private fun sampleFor(bytes: ByteArray, width: Int): Int {
