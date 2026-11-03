@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
     private var doorbellCameras by mutableStateOf<List<HaEntity>>(emptyList())
     private var doorbellSensor by mutableStateOf<String?>(null)
     private var doorbellCamera by mutableStateOf<String?>(null)
+    private var doorbellPause by mutableStateOf(true)
     /** A camera to open full screen once the Home row has loaded (OK on the doorbell pop-up). */
     private var pendingCamera: String? = null
     private var lightMode by mutableStateOf(false)
@@ -397,6 +398,11 @@ class MainActivity : ComponentActivity() {
                                 haStore.doorbellCamera = id
                                 doorbellCamera = id
                             },
+                            doorbellPause = doorbellPause,
+                            onToggleDoorbellPause = {
+                                haStore.doorbellPause = it
+                                doorbellPause = it
+                            },
                             onTestDoorbell = {
                                 val popup = DoorbellPopup.current
                                 if (popup == null) toast("Turn on the Home button service first (it shows the pop-up)")
@@ -511,6 +517,7 @@ class MainActivity : ComponentActivity() {
     private fun loadDoorbellChoices() {
         doorbellSensor = haStore.doorbellSensor
         doorbellCamera = haStore.doorbellCamera
+        doorbellPause = haStore.doorbellPause
         if (!haStore.isSignedIn) return
         lifecycleScope.launch {
             val states = withContext(Dispatchers.IO) { runCatching { ha.states() }.getOrNull() } ?: return@launch
