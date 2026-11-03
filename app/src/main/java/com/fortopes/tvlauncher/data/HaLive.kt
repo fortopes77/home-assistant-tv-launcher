@@ -20,7 +20,11 @@ import java.util.concurrent.TimeUnit
  * every 30 seconds, it asks once, then Home Assistant sends only the changes to the entities the Home row
  * uses. Lights show their new state as soon as they change, and the TV does far less work.
  */
-class HaLive(private val store: HaStore) {
+class HaLive(
+    private val store: HaStore,
+    /** Which entities to follow. The Home row's kinds by default; the doorbell watcher follows just one. */
+    private val wanted: (String) -> Boolean = { isUsed(it) },
+) {
 
     /**
      * The Home row's entities: everything once, then again after each change. Ends when the connection
@@ -50,7 +54,7 @@ class HaLive(private val store: HaStore) {
                         for (i in 0 until arr.length()) {
                             val o = arr.getJSONObject(i)
                             val id = o.getString("entity_id")
-                            if (!isUsed(id)) continue
+                            if (!wanted(id)) continue
                             entities[id] = entity(id, o.optString("state"), o.optJSONObject("attributes") ?: JSONObject())
                         }
                         trySend(entities.values.toList())
@@ -126,16 +130,16 @@ class HaLive(private val store: HaStore) {
     private fun entity(id: String, state: String, attrs: JSONObject) =
         HaEntity(id = id, state = state, name = attrs.optString("friendly_name").ifBlank { id }, attributes = attrs)
 
-    private companion object {
-        const val GET_STATES = 1
-        const val SUBSCRIBE = 2
+    companion object {
+        private const val GET_STATES = 1
+        private const val SUBSCRIBE = 2
 
         /** The kinds of entity the Home row shows; changes to anything else (sensors, mostly) aren't sent. */
-        val USED = setOf("light", "cover", "scene", "script", "camera", "weather", "media_player")
+        private val USED = setOf("light", "cover", "scene", "script", "camera", "weather", "media_player")
 
         fun isUsed(id: String) = id.substringBefore('.') in USED
 
-        val client: OkHttpClient = OkHttpClient.Builder()
+        private val client: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)
             // Notices a connection that silently died (Wi-Fi blip, Home Assistant restart).

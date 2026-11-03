@@ -159,6 +159,25 @@ class AppRepository(context: Context) {
         order = shown.map { it.key }
     }
 
+    /** Your favourite apps, in the order you added them. They show in their own row, even if hidden from Apps. */
+    var favourites: List<String>
+        get() = prefs.getString("favourites", "").orEmpty().split('\n').filter { it.isNotBlank() }
+        private set(value) = prefs.edit().putString("favourites", value.joinToString("\n")).apply()
+
+    fun toggleFavourite(app: TvApp) {
+        favourites = if (app.key in favourites) favourites - app.key else favourites + app.key
+    }
+
+    /** Moves a favourite one place left (-1) or right (+1). */
+    fun moveFavourite(app: TvApp, by: Int) {
+        val list = favourites.toMutableList()
+        val i = list.indexOf(app.key)
+        val j = i + by
+        if (i < 0 || j !in list.indices) return
+        list.add(j, list.removeAt(i))
+        favourites = list
+    }
+
     fun hide(app: TvApp) {
         hidden = hidden + app.key
     }

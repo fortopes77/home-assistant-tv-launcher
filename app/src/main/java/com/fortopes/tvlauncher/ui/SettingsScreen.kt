@@ -1,5 +1,7 @@
 package com.fortopes.tvlauncher.ui
 
+import com.fortopes.tvlauncher.data.HaEntity
+import com.fortopes.tvlauncher.data.HomeRows
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -44,6 +46,17 @@ fun SettingsScreen(
     hiddenApps: List<Pair<String, String>>,
     onToggleLightMode: (Boolean) -> Unit,
     onUnhideApp: (String) -> Unit,
+    rowOrder: List<String>,
+    hiddenRows: Set<String>,
+    onToggleRow: (String) -> Unit,
+    onMoveRowUp: (String) -> Unit,
+    doorbellSensors: List<HaEntity>,
+    doorbellCameras: List<HaEntity>,
+    doorbellSensor: String?,
+    doorbellCamera: String?,
+    onPickDoorbellSensor: (String?) -> Unit,
+    onPickDoorbellCamera: (String?) -> Unit,
+    onTestDoorbell: () -> Unit,
     version: String,
     onToggleOverride: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -219,6 +232,51 @@ fun SettingsScreen(
                 modifier = rowModifier,
                 headlineContent = { Text("Disconnect Home Assistant") },
             )
+
+            // OK steps through the choices, so nothing needs typing.
+            val sensorName = doorbellSensor?.let { id -> doorbellSensors.firstOrNull { it.id == id }?.name ?: id }
+            ListItem(
+                selected = false,
+                onClick = {
+                    val ids = listOf<String?>(null) + doorbellSensors.map { it.id }
+                    onPickDoorbellSensor(ids[(ids.indexOf(doorbellSensor) + 1) % ids.size])
+                },
+                modifier = rowModifier,
+                headlineContent = { Text("Doorbell pop-up") },
+                supportingContent = {
+                    Text(
+                        when {
+                            sensorName != null -> "On: when $sensorName goes off, the camera pops up over whatever's playing. OK for the next sensor."
+                            doorbellSensors.isEmpty() -> "Off. No doorbell or person sensors found in Home Assistant."
+                            else -> "Off. Press OK to pick the sensor that rings it (doorbell buttons first, then person detection)."
+                        },
+                    )
+                },
+                trailingContent = { Text(if (sensorName != null) "On" else "Off", color = if (sensorName != null) TvColors.Cyan else TvColors.Muted) },
+            )
+            if (doorbellSensor != null) {
+                val auto = sensorName?.let { com.fortopes.tvlauncher.home.DoorbellPopup.matchCamera(it, doorbellCameras)?.name }
+                ListItem(
+                    selected = false,
+                    onClick = {
+                        val ids = listOf<String?>(null) + doorbellCameras.map { it.id }
+                        onPickDoorbellCamera(ids[(ids.indexOf(doorbellCamera) + 1) % ids.size])
+                    },
+                    modifier = rowModifier,
+                    headlineContent = { Text("Doorbell camera") },
+                    supportingContent = {
+                        val name = doorbellCamera?.let { id -> doorbellCameras.firstOrNull { it.id == id }?.name ?: id }
+                        Text((name ?: "Automatic" + (auto?.let { ": $it" } ?: "")) + ". OK for the next camera.")
+                    },
+                )
+                ListItem(
+                    selected = false,
+                    onClick = onTestDoorbell,
+                    modifier = rowModifier,
+                    headlineContent = { Text("Try the doorbell pop-up") },
+                    supportingContent = { Text("Shows it now for 30 seconds. Back closes it, OK opens the camera.") },
+                )
+            }
         }
 
         Text("Look", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
@@ -250,6 +308,28 @@ fun SettingsScreen(
                 modifier = rowModifier,
                 headlineContent = { Text(label) },
                 supportingContent = { Text("Hidden from Fortopes Home. Press OK to show it again.") },
+            )
+        }
+
+        Text("Rows", color = TvColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+        Text(
+            "OK shows or hides a row. Hold OK to move it up.",
+            color = TvColors.Muted,
+            fontSize = 13.sp,
+            modifier = rowModifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+        )
+        rowOrder.forEachIndexed { i, key ->
+            val shown = key !in hiddenRows
+            val note: (@Composable () -> Unit)? =
+                if (key == "favourites") ({ Text("Hold OK on an app and choose Add to favourites.") }) else null
+            ListItem(
+                selected = false,
+                onClick = { onToggleRow(key) },
+                onLongClick = { onMoveRowUp(key) },
+                modifier = rowModifier,
+                headlineContent = { Text("${i + 1}. ${HomeRows.title(key)}") },
+                supportingContent = note,
+                trailingContent = { Switch(checked = shown, onCheckedChange = null) },
             )
         }
 

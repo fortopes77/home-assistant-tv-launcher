@@ -104,6 +104,12 @@ private sealed interface HomeRow {
         override val title = "Continue watching"
     }
 
+    /** The apps you've added to favourites, in your order. */
+    data class Favourites(val apps: List<TvApp>) : HomeRow {
+        override val key = "favourites"
+        override val title = "Favourites"
+    }
+
     data class Apps(val apps: List<TvApp>) : HomeRow {
         override val key = "apps"
         override val title = "Apps"
@@ -139,6 +145,9 @@ fun HomeScreen(
     continueItems: List<ContinueItem>,
     continueNeedsSetup: Boolean,
     apps: List<TvApp>,
+    favourites: List<TvApp>,
+    rowOrder: List<String>,
+    hiddenRows: Set<String>,
     recommended: List<SeerrItem>,
     seerrNeedsSetup: Boolean,
     canPlayJellyfin: Boolean,
@@ -152,6 +161,8 @@ fun HomeScreen(
     settingsOpen: Boolean,
     resetSignal: Int,
     onMoveApp: (TvApp, Int) -> Unit,
+    onMoveFavourite: (TvApp, Int) -> Unit,
+    onToggleFavourite: (TvApp) -> Unit,
     onHideApp: (TvApp) -> Unit,
     onAppInfo: (TvApp) -> Unit,
     onOpenContinue: (ContinueItem) -> Unit,
@@ -170,8 +181,9 @@ fun HomeScreen(
     onSeerrPlay: (SeerrItem) -> Unit,
     onSeerrRequest: (SeerrItem) -> Unit,
 ) {
-    val rows = remember(continueItems, continueNeedsSetup, apps, recommended, seerrNeedsSetup, inputs, tuners, channels, home) {
-        buildList {
+    val rows = remember(continueItems, continueNeedsSetup, apps, favourites, rowOrder, hiddenRows, recommended, seerrNeedsSetup, inputs, tuners, channels, home) {
+        buildList<HomeRow> {
+            if (favourites.isNotEmpty()) add(HomeRow.Favourites(favourites))
             if (continueItems.isNotEmpty() || continueNeedsSetup) {
                 add(HomeRow.ContinueWatching(continueItems, showSetup = continueItems.isEmpty()))
             }
@@ -181,6 +193,9 @@ fun HomeScreen(
             add(HomeRow.Home(home))
             if (inputs.isNotEmpty()) add(HomeRow.Inputs(inputs))
         }
+            // Your order and hidden rows, from the gear.
+            .filter { it.key !in hiddenRows }
+            .sortedBy { row -> rowOrder.indexOf(row.key).let { if (it < 0) Int.MAX_VALUE else it } }
     }
 
     var spotlight by remember { mutableStateOf<Spotlight?>(null) }
@@ -201,6 +216,8 @@ fun HomeScreen(
 
     // Hold OK on an app: a small menu, then Move (left and right) or Hide.
     var menuApp by remember { mutableStateOf<TvApp?>(null) }
+    /** Whether the menu was opened from the Favourites row, which moves within favourites. */
+    var menuFromFavourites by remember { mutableStateOf(false) }
     var movingKey by remember { mutableStateOf<String?>(null) }
     var menuReturnKey by remember { mutableStateOf<String?>(null) }
     val appFocus = remember { HashMap<String, FocusRequester>() }
@@ -231,6 +248,58 @@ fun HomeScreen(
         rowStates.values.forEach { it.scrollToItem(0) }
         delay(50)
         runCatching { firstCard.requestFocus() }
+    }
+
+    /** An app card, in the Apps row or the Favourites row. Hold OK for its menu. */
+    @Composable
+    fun AppItem(app: TvApp, i: Int, lastIndex: Int, isFirstRow: Boolean, favouritesRow: Boolean) {
+        val focusKey = if (favouritesRow) "fav:${app.key}" else app.key
+        val moving = movingKey == focusKey
+        val bringIntoView = remember { BringIntoViewRequester() }
+        // Keep the card in view as it moves along the row.
+        if (moving) LaunchedEffect(i) { runCatching { bringIntoView.bringIntoView() } }
+        val hint = if (favouritesRow) "Favourite · hold OK to move or remove it" else "App · hold OK to move, hide or add to favourites"
+        AppCard(
+            app = app,
+            onClick = { onOpenApp(app) },
+            onLongClick = {
+                menuReturnKey = focusKey
+                menuFromFavourites = favouritesRow
+                menuApp = app
+            },
+            moving = moving,
+            modifier = Modifier
+                .firstIf(isFirstRow && i == 0, firstCard)
+                .rowEnd(i == lastIndex)
+                .focusRequester(appFocus.getOrPut(focusKey) { FocusRequester() })
+                .bringIntoViewRequester(bringIntoView)
+                .onPreviewKeyEvent { e ->
+                    if (!moving) return@onPreviewKeyEvent false
+                    when (e.key) {
+                        Key.DirectionLeft, Key.DirectionRight -> {
+                            if (e.type == KeyEventType.KeyDown) {
+                                val by = if (e.key == Key.DirectionLeft) -1 else 1
+                                if (favouritesRow) onMoveFavourite(app, by) else onMoveApp(app, by)
+                            }
+                            true
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Back, Key.Escape -> {
+                            if (e.type == KeyEventType.KeyUp) {
+                                movingKey = null
+                                spotlight = Spotlight(app.label, hint, app.color)
+                            }
+                            true
+                        }
+                        else -> true // stay on the card until you're done
+                    }
+                }
+                .onFocusChanged {
+                    if (it.isFocused) {
+                        spotlight = if (moving) Spotlight(app.label, "Moving · left and right to move it · OK when done", app.color)
+                        else Spotlight(app.label, hint, app.color)
+                    }
+                },
+        )
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -320,48 +389,11 @@ fun HomeScreen(
                                         }
                                     }
                                 }
+                                is HomeRow.Favourites -> itemsIndexed(row.apps, key = { _, app -> "fav:${app.key}" }) { i, app ->
+                                    AppItem(app, i, row.apps.lastIndex, isFirstRow, favouritesRow = true)
+                                }
                                 is HomeRow.Apps -> itemsIndexed(row.apps, key = { _, app -> app.key }) { i, app ->
-                                    val moving = movingKey == app.key
-                                    val bringIntoView = remember { BringIntoViewRequester() }
-                                    // Keep the card in view as it moves along the row.
-                                    if (moving) LaunchedEffect(i) { runCatching { bringIntoView.bringIntoView() } }
-                                    AppCard(
-                                        app = app,
-                                        onClick = { onOpenApp(app) },
-                                        onLongClick = {
-                                            menuReturnKey = app.key
-                                            menuApp = app
-                                        },
-                                        moving = moving,
-                                        modifier = Modifier
-                                            .firstIf(isFirstRow && i == 0, firstCard)
-                                            .rowEnd(i == row.apps.lastIndex)
-                                            .focusRequester(appFocus.getOrPut(app.key) { FocusRequester() })
-                                            .bringIntoViewRequester(bringIntoView)
-                                            .onPreviewKeyEvent { e ->
-                                                if (!moving) return@onPreviewKeyEvent false
-                                                when (e.key) {
-                                                    Key.DirectionLeft, Key.DirectionRight -> {
-                                                        if (e.type == KeyEventType.KeyDown) onMoveApp(app, if (e.key == Key.DirectionLeft) -1 else 1)
-                                                        true
-                                                    }
-                                                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Back, Key.Escape -> {
-                                                        if (e.type == KeyEventType.KeyUp) {
-                                                            movingKey = null
-                                                            spotlight = Spotlight(app.label, "App", app.color)
-                                                        }
-                                                        true
-                                                    }
-                                                    else -> true // stay on the card until you're done
-                                                }
-                                            }
-                                            .onFocusChanged {
-                                                if (it.isFocused) {
-                                                    spotlight = if (moving) Spotlight(app.label, "Moving · left and right to move it · OK when done", app.color)
-                                                    else Spotlight(app.label, "App · hold OK to move or hide it", app.color)
-                                                }
-                                            },
-                                    )
+                                    AppItem(app, i, row.apps.lastIndex, isFirstRow, favouritesRow = false)
                                 }
                                 is HomeRow.Recommended -> {
                                     itemsIndexed(row.items, key = { _, item -> item.key }) { i, item ->
@@ -562,9 +594,17 @@ fun HomeScreen(
         menuApp?.let { app ->
             AppMenu(
                 app = app,
+                fromFavourites = menuFromFavourites,
+                isFavourite = favourites.any { it.key == app.key },
+                onFavourite = {
+                    menuApp = null
+                    // Removing it from the Favourites row: focus goes to the first card instead.
+                    if (menuFromFavourites) appFocus.remove("fav:${app.key}")
+                    onToggleFavourite(app)
+                },
                 onMove = {
                     menuApp = null
-                    movingKey = app.key
+                    movingKey = if (menuFromFavourites) "fav:${app.key}" else app.key
                     spotlight = Spotlight(app.label, "Moving · left and right to move it · OK when done", app.color)
                 },
                 onHide = {
@@ -608,7 +648,15 @@ fun HomeScreen(
 /** The menu for an app, from holding OK: a small panel on the right, like Google TV's. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun AppMenu(app: TvApp, onMove: () -> Unit, onHide: () -> Unit, onInfo: () -> Unit) {
+private fun AppMenu(
+    app: TvApp,
+    fromFavourites: Boolean,
+    isFavourite: Boolean,
+    onFavourite: () -> Unit,
+    onMove: () -> Unit,
+    onHide: () -> Unit,
+    onInfo: () -> Unit,
+) {
     val first = remember { FocusRequester() }
     LaunchedEffect(app.key) { runCatching { first.requestFocus() } }
     // The OK that opened the menu is still held; ignore it until it's let go, so it doesn't pick "Move".
@@ -633,8 +681,12 @@ private fun AppMenu(app: TvApp, onMove: () -> Unit, onHide: () -> Unit, onInfo: 
         Text(app.label, color = TvColors.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
         ListItem(selected = false, onClick = onMove, modifier = Modifier.focusRequester(first), headlineContent = { Text("Move") },
             supportingContent = { Text("Left and right to move it, OK when done") })
-        ListItem(selected = false, onClick = onHide, headlineContent = { Text("Hide") },
-            supportingContent = { Text("Show it again from the gear") })
+        ListItem(selected = false, onClick = onFavourite, headlineContent = { Text(if (isFavourite) "Remove from favourites" else "Add to favourites") },
+            supportingContent = { Text(if (isFavourite) "Takes it out of the Favourites row" else "Puts it in the Favourites row at the top") })
+        if (!fromFavourites) {
+            ListItem(selected = false, onClick = onHide, headlineContent = { Text("Hide") },
+                supportingContent = { Text("Show it again from the gear") })
+        }
         ListItem(selected = false, onClick = onInfo, headlineContent = { Text("App info") },
             supportingContent = { Text("Android's page for it: update, clear, uninstall") })
     }
