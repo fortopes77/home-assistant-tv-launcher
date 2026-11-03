@@ -1,6 +1,10 @@
 package com.fortopes.tvlauncher.ui
 
 import android.text.format.DateFormat
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -181,9 +185,17 @@ fun HomeScreen(
 
     var spotlight by remember { mutableStateOf<Spotlight?>(null) }
     // Light mode keeps one colour, so the background never has to redraw.
+    // The glow only follows focus once it settles, so holding an arrow along a row doesn't keep the whole
+    // screen redrawing while the TV is busy scrolling.
+    var accentTarget by remember { mutableStateOf(TvColors.Purple) }
+    val focusColor = if (lightMode) TvColors.Purple else spotlight?.color ?: TvColors.Purple
+    LaunchedEffect(focusColor) {
+        if (accentTarget != focusColor) delay(300)
+        accentTarget = focusColor
+    }
     val accent by animateColorAsState(
-        targetValue = if (lightMode) TvColors.Purple else spotlight?.color ?: TvColors.Purple,
-        animationSpec = if (lightMode) snap<Color>() else tween<Color>(durationMillis = 600),
+        targetValue = accentTarget,
+        animationSpec = if (lightMode) snap<Color>() else tween<Color>(durationMillis = 450),
         label = "accent",
     )
 
@@ -221,37 +233,8 @@ fun HomeScreen(
         runCatching { firstCard.requestFocus() }
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(TvColors.Background)
-            .drawBehind {
-                // Deep purple into deep blue, with a purple glow bottom left and a blue one top right.
-                drawRect(
-                    Brush.linearGradient(
-                        listOf(TvColors.BgPurple, TvColors.BgIndigo, TvColors.BgBlue),
-                        start = Offset(0f, size.height),
-                        end = Offset(size.width, 0f),
-                    ),
-                )
-                drawRect(
-                    Brush.radialGradient(
-                        colors = listOf(TvColors.Purple.copy(alpha = 0.28f), Color.Transparent),
-                        center = Offset(size.width * 0.1f, size.height * 0.95f),
-                        radius = size.width * 0.55f,
-                    ),
-                )
-                // The focused app's colour (blue in light mode), top right.
-                drawRect(
-                    Brush.radialGradient(
-                        colors = listOf((if (lightMode) TvColors.Blue else accent).copy(alpha = 0.34f), Color.Transparent),
-                        center = Offset(size.width * 0.82f, size.height * 0.05f),
-                        radius = size.width * 0.7f,
-                    ),
-                )
-                drawRect(Brush.verticalGradient(listOf(Color.Transparent, TvColors.Background.copy(alpha = 0.45f))))
-            },
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        HomeBackground(accent = { if (lightMode) TvColors.Blue else accent })
         Column(Modifier.fillMaxSize()) {
             TopBar(home?.weather, onOpenLauncherSettings, gearFocus)
 
@@ -759,5 +742,54 @@ private fun ControlCard(c: HaEntity, onClick: () -> Unit, modifier: Modifier = M
         active = c.isOn,
         detail = controlState(c),
         modifier = modifier,
+    )
+}
+
+/**
+ * Deep purple into deep blue, with a purple glow bottom left and the focused app's colour top right.
+ * The parts that never change are drawn once into a picture, so each frame is one picture and one glow
+ * instead of four full-screen layers. It sits in its own layer, so the glow fading doesn't redraw the rows.
+ */
+@Composable
+private fun HomeBackground(accent: () -> Color) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer()
+            .drawWithCache {
+                val w = size.width.toInt().coerceAtLeast(1)
+                val h = size.height.toInt().coerceAtLeast(1)
+                val base = ImageBitmap(w, h)
+                CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(base), size) {
+                    drawRect(
+                        Brush.linearGradient(
+                            listOf(TvColors.BgPurple, TvColors.BgIndigo, TvColors.BgBlue),
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, 0f),
+                        ),
+                    )
+                    drawRect(
+                        Brush.radialGradient(
+                            colors = listOf(TvColors.Purple.copy(alpha = 0.28f), Color.Transparent),
+                            center = Offset(size.width * 0.1f, size.height * 0.95f),
+                            radius = size.width * 0.55f,
+                        ),
+                    )
+                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, TvColors.Background.copy(alpha = 0.45f))))
+                }
+                val center = Offset(size.width * 0.82f, size.height * 0.05f)
+                val radius = size.width * 0.7f
+                // Only the part of the screen the glow reaches.
+                val glowTopLeft = Offset((center.x - radius).coerceAtLeast(0f), 0f)
+                val glowSize = Size(size.width - glowTopLeft.x, (center.y + radius).coerceAtMost(size.height))
+                onDrawBehind {
+                    drawImage(base)
+                    drawRect(
+                        Brush.radialGradient(listOf(accent().copy(alpha = 0.34f), Color.Transparent), center = center, radius = radius),
+                        topLeft = glowTopLeft,
+                        size = glowSize,
+                    )
+                }
+            },
     )
 }
