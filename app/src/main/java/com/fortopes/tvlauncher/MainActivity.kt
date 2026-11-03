@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.fortopes.tvlauncher.data.HaClient
 import com.fortopes.tvlauncher.data.HaEntity
+import com.fortopes.tvlauncher.data.HaLive
+import com.fortopes.tvlauncher.data.HttpException
 import com.fortopes.tvlauncher.data.HaStore
 import com.fortopes.tvlauncher.data.HomeRepository
 import com.fortopes.tvlauncher.data.HomeState
@@ -76,7 +78,27 @@ class MainActivity : ComponentActivity() {
             if (now - event.eventTime > STALE_REPEAT_MS || now - lastRepeatAt < REPEAT_GAP_MS) return true
             lastRepeatAt = now
         }
-        return super.dispatchKeyEvent(event)
+        val handled = super.dispatchKeyEvent(event)
+        if (handled && event.action == android.view.KeyEvent.ACTION_DOWN) playKeySound(event)
+        return handled
+    }
+
+    /**
+     * The TV's own little click as you move around and press OK, like the stock home screen. Android
+     * plays it only when System sounds is on in the TV's settings, so turning that off silences it.
+     * Only for keys that did something, so the end of a row stays quiet.
+     */
+    private fun playKeySound(event: android.view.KeyEvent) {
+        val effect = when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> android.view.SoundEffectConstants.NAVIGATION_LEFT
+            android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> android.view.SoundEffectConstants.NAVIGATION_RIGHT
+            android.view.KeyEvent.KEYCODE_DPAD_UP -> android.view.SoundEffectConstants.NAVIGATION_UP
+            android.view.KeyEvent.KEYCODE_DPAD_DOWN -> android.view.SoundEffectConstants.NAVIGATION_DOWN
+            android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER ->
+                if (event.repeatCount == 0) android.view.SoundEffectConstants.CLICK else return
+            else -> return
+        }
+        window.decorView.playSoundEffect(effect)
     }
 
     private fun isArrow(code: Int) = code == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
@@ -102,6 +124,12 @@ class MainActivity : ComponentActivity() {
     private var seerrStatus by mutableStateOf<String?>(null)
     private var recommendedAt = 0L
     private var homePolling: Job? = null
+    private lateinit var haLive: HaLive
+    /** True while Home Assistant's live connection is up, so changes arrive by themselves. */
+    @Volatile private var haLiveUp = false
+    private var appsLoaded = false
+    private var inputsAt = 0L
+    private var channelsAt = 0L
 
     private val loadLock = Mutex()
 
@@ -152,6 +180,7 @@ class MainActivity : ComponentActivity() {
         haStore = HaStore(this)
         ha = HaClient(haStore)
         homeRepo = HomeRepository(haStore, ha)
+        haLive = HaLive(haStore)
         seerrStore = SeerrStore(this)
         seerr = SeerrClient(seerrStore)
 
@@ -163,7 +192,7 @@ class MainActivity : ComponentActivity() {
                         HaSetupScreen(store = haStore, client = ha, onDone = {
                             screen = haSetupReturn
                             refreshStatus()
-                            reloadHome()
+                            startHomePolling()
                         })
                     }
                     Screen.SeerrSetup -> {
@@ -186,6 +215,7 @@ class MainActivity : ComponentActivity() {
                         JellyfinSetupScreen(client = jellyfin, onDone = {
                             screen = Screen.Settings
                             refreshStatus()
+                            channelsAt = 0L
                             reloadContinue()
                         })
                     }
@@ -205,7 +235,7 @@ class MainActivity : ComponentActivity() {
                             tuners = tuners,
                             channels = channels,
                             home = home,
-                            loadCamera = ::loadCamera,
+                            loadCamera = ::loadCameraThumb,
                             loaded = loaded,
                             lightMode = lightMode,
                             settingsOpen = screen == Screen.Settings,
@@ -335,6 +365,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onSignOutHa = {
                                 haStore.signOut()
+                                homePolling?.cancel()
                                 home = null
                                 refreshStatus()
                             },
@@ -401,13 +432,25 @@ class MainActivity : ComponentActivity() {
                         loaded = true
                     }
                 }
-                val (newApps, newInputs) = withContext(Dispatchers.IO) {
-                    appRepo.loadApps() to inputRepo.loadInputs()
+                // Pressing Home shouldn't mean asking every app about itself: only look again when Android
+                // says something was installed, updated or removed.
+                val appsChanged = !appsLoaded || withContext(Dispatchers.IO) { appRepo.appsChanged() }
+                if (appsChanged) {
+                    val newApps = withContext(Dispatchers.IO) { appRepo.loadApps() }
+                    appsLoaded = true
+                    if (newApps != allApps) {
+                        allApps = newApps
+                        applyArrangement()
+                    }
                 }
-                allApps = newApps
-                applyArrangement()
-                inputs = newInputs
-                tuners = withContext(Dispatchers.IO) { inputRepo.loadTuners() }
+                // Inputs hardly ever change; look again every few minutes, or when apps did.
+                val now = System.currentTimeMillis()
+                if (appsChanged || now - inputsAt > INPUTS_EVERY_MS) {
+                    val (newInputs, newTuners) = withContext(Dispatchers.IO) { inputRepo.loadInputs() to inputRepo.loadTuners() }
+                    if (newInputs != inputs) inputs = newInputs
+                    if (newTuners != tuners) tuners = newTuners
+                    inputsAt = now
+                }
                 loaded = true
             }
         }
@@ -490,19 +533,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Keeps the Home row fresh while Fortopes Home is showing: lights, what's playing, the weather. */
+    /**
+     * Keeps the Home row fresh while Fortopes Home is showing: lights, what's playing, the weather. It uses
+     * Home Assistant's live connection, which sends only what changed. If that can't connect, it asks for
+     * everything every 30 seconds instead, and tries the live connection again each time.
+     */
     private fun startHomePolling() {
         homePolling?.cancel()
+        if (!haStore.isSignedIn) return
         homePolling = lifecycleScope.launch {
             while (isActive) {
+                val ended = runCatching {
+                    haLive.updates().collect { states ->
+                        haLiveUp = true
+                        home = withContext(Dispatchers.IO) { homeRepo.build(states) }
+                        // Several changes at once (a scene turning on many lights) become one redraw.
+                        delay(300)
+                    }
+                }.exceptionOrNull()
+                haLiveUp = false
+                if (!isActive) break
+                if (ended is HttpException && ended.code == 401) {
+                    home = homeRepo.failed(ended)
+                    break
+                }
                 reloadHomeNow()
                 delay(30_000)
             }
         }
-    }
-
-    private fun reloadHome() {
-        lifecycleScope.launch { reloadHomeNow() }
     }
 
     private suspend fun reloadHomeNow() {
@@ -517,9 +575,28 @@ class MainActivity : ComponentActivity() {
             } else if (entity.domain == "script" || entity.domain == "scene") {
                 toast("${entity.name}: done")
             }
-            delay(600) // give Home Assistant a moment to update, then show the new state
-            reloadHomeNow()
+            // The live connection shows the change by itself; otherwise ask once Home Assistant has caught up.
+            if (!haLiveUp) {
+                delay(600)
+                reloadHomeNow()
+            }
         }
+    }
+
+    /**
+     * A camera picture small enough for a card. Home Assistant scales it down, and it's decoded smaller too,
+     * so a 4K doorbell doesn't take tens of megabytes every 15 seconds.
+     */
+    private suspend fun loadCameraThumb(entityId: String): ImageBitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            val bytes = ha.cameraImage(entityId, width = CAMERA_THUMB_WIDTH)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= CAMERA_THUMB_WIDTH) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.asImageBitmap()
+        }.getOrNull()
     }
 
     private suspend fun loadCamera(entityId: String): ImageBitmap? = withContext(Dispatchers.IO) {
@@ -532,14 +609,26 @@ class MainActivity : ComponentActivity() {
     private fun reloadContinue() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { continueRepo.load() }
-            continueItems = result.items
-            // Live TV channels and what's on them, from the same Jellyfin sign-in.
-            channels = withContext(Dispatchers.IO) { runCatching { jellyfin.liveChannels() }.getOrDefault(channels) }
+            // Only redraw the row when something in it changed.
+            if (result.items.map { it.looks() } != continueItems.map { it.looks() }) continueItems = result.items
             if (result.jellyfinError != null && jellyfinStore.isSignedIn) {
                 jellyfinStatus = "${result.jellyfinError}. Press OK to sign in again."
             }
         }
+        // Live TV channels and what's on them, from the same Jellyfin sign-in. What's on changes every half
+        // hour or so, so there's no need to ask every time Home is pressed.
+        val now = System.currentTimeMillis()
+        if (now - channelsAt > CHANNELS_EVERY_MS) {
+            channelsAt = now
+            lifecycleScope.launch {
+                val fresh = withContext(Dispatchers.IO) { runCatching { jellyfin.liveChannels() }.getOrNull() }
+                if (fresh == null) channelsAt = 0L else if (fresh != channels) channels = fresh
+            }
+        }
     }
+
+    /** What a Continue watching card shows (the open action isn't comparable). */
+    private fun ContinueItem.looks() = listOf(key, title, subtitle, imageUrl, progress, sourceLabel)
 
     private fun openTvSettings() = open(Intent(Settings.ACTION_SETTINGS))
 
@@ -561,6 +650,9 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_FROM_HOME_BUTTON = "from_home_button"
+        private const val INPUTS_EVERY_MS = 5 * 60_000L
+        private const val CHANNELS_EVERY_MS = 10 * 60_000L
+        private const val CAMERA_THUMB_WIDTH = 480
     }
 }
 

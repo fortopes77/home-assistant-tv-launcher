@@ -1,5 +1,7 @@
 package com.fortopes.tvlauncher.data
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import android.content.Context
 import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
@@ -20,22 +22,25 @@ class ContinueWatchingRepository(
 
     data class Result(val items: List<ContinueItem>, val jellyfinError: String?)
 
-    fun load(): Result {
+    /** Asks Jellyfin, the TV's watch next list and the remembered shows at the same time. */
+    suspend fun load(): Result = coroutineScope {
+        val jellyfinAsk = async { runCatching { jellyfin.resume() } }
+        val watchNextAsk = async { runCatching { watchNext.load() }.getOrDefault(emptyList()) }
         var jellyfinError: String? = null
-        val fromJellyfin = runCatching { jellyfin.resume() }
+        val fromJellyfin = jellyfinAsk.await()
             .onFailure {
                 jellyfinError = if (it is HttpException && it.code == 401) "Jellyfin sign-in expired" else "Couldn't reach Jellyfin"
             }
             .getOrDefault(emptyList())
         // Jellyfin's own resume list is better when you're signed in; otherwise its watch next entries do.
-        val fromWatchNext = runCatching { watchNext.load() }.getOrDefault(emptyList())
+        val fromWatchNext = watchNextAsk.await()
             .filter { fromJellyfin.isEmpty() || it.sourcePackage != JellyfinClient.JELLYFIN_PACKAGE }
         val fromNowPlaying = runCatching { nowPlaying.items() }.getOrDefault(emptyList())
         // An app in the watch next list is better (it opens the exact show), so it wins over a remembered one.
         val fromApps = fromWatchNext + fromNowPlaying.filter { np -> fromWatchNext.none { it.sourcePackage == np.sourcePackage } }
         // Newest first across all apps; items with no time (rare) go last.
         val items = (fromJellyfin + fromApps).sortedByDescending { it.lastWatched }.take(20)
-        return Result(items, jellyfinError)
+        Result(items, jellyfinError)
     }
 
     /** Opens the item. Jellyfin is opened first and then told to play, in the background. */

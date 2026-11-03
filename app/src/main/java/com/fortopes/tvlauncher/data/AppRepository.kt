@@ -58,7 +58,16 @@ class AppRepository(context: Context) {
         }
     }.getOrDefault(emptyList())
 
+    private var packagesSeen = 0
+
+    /**
+     * Whether any app was installed, updated or removed since the last [loadApps]. Android keeps count, so
+     * this is one quick question instead of asking about every app each time Home is pressed.
+     */
+    fun appsChanged(): Boolean = runCatching { pm.getChangedPackages(packagesSeen) != null }.getOrDefault(true)
+
     fun loadApps(): List<TvApp> {
+        val seenNow = runCatching { pm.getChangedPackages(packagesSeen)?.sequenceNumber }.getOrNull()
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
         var changed = false
         val apps = pm.queryIntentActivities(intent, 0)
@@ -96,6 +105,7 @@ class AppRepository(context: Context) {
         val known = apps.map { it.key }.toSet()
         if (cache.keys.retainAll(known)) changed = true // uninstalled apps
         if (changed || !indexFile.exists()) saveIndex(apps)
+        if (seenNow != null) packagesSeen = seenNow
         return apps
     }
 

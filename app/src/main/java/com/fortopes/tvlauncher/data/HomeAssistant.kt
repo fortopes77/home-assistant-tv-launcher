@@ -91,9 +91,10 @@ class HaClient(private val store: HaStore) {
         (0 until arr.length()).map { arr.getString(it) }.sorted()
     }.getOrDefault(emptyList())
 
-    /** A camera's current picture as JPEG bytes. */
-    fun cameraImage(entityId: String): ByteArray {
-        val conn = java.net.URL(Mdns.rewrite("$base/api/camera_proxy/$entityId?t=${System.currentTimeMillis()}")).openConnection() as java.net.HttpURLConnection
+    /** A camera's current picture as JPEG bytes, scaled down by Home Assistant to [width] when given. */
+    fun cameraImage(entityId: String, width: Int? = null): ByteArray {
+        val size = if (width != null) "&width=$width" else ""
+        val conn = java.net.URL(Mdns.rewrite("$base/api/camera_proxy/$entityId?t=${System.currentTimeMillis()}$size")).openConnection() as java.net.HttpURLConnection
         try {
             conn.connectTimeout = 6000
             conn.readTimeout = 10_000
@@ -143,9 +144,20 @@ class HomeRepository(private val store: HaStore, private val client: HaClient) {
         val states = try {
             client.states()
         } catch (e: Exception) {
-            val msg = if (e is HttpException && e.code == 401) "Home Assistant token stopped working" else "Couldn't reach Home Assistant"
-            return HomeState(null, emptyList(), emptyList(), emptyList(), emptyList(), null, msg)
+            return failed(e)
         }
+        return build(states)
+    }
+
+    /** The Home row when Home Assistant can't be reached. */
+    fun failed(e: Throwable): HomeState {
+        val msg = if (e is HttpException && e.code == 401) "Home Assistant token stopped working" else "Couldn't reach Home Assistant"
+        return HomeState(null, emptyList(), emptyList(), emptyList(), emptyList(), null, msg)
+    }
+
+    /** Picks the Home row out of [states] (from a full download, or the live connection). */
+    fun build(states: List<HaEntity>): HomeState? {
+        if (!store.isSignedIn) return null
         val room = store.room
         val inRoom: Set<String> = when {
             room == null -> emptySet()

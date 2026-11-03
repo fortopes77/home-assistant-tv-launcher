@@ -1,0 +1,4 @@
+# Startup profile for Fortopes Home: compile all of the app's own code ahead of time, so the first open after
+# an install or update isn't interpreted. Compose and the other libraries ship their own profiles.
+HSPLcom/fortopes/tvlauncher/**->**(**)**
+Lcom/fortopes/tvlauncher/**;
